@@ -4,8 +4,13 @@
   box-sizing: border-box;
 }
 
+html,
 body {
+  height: 100%;
   margin: 0;
+}
+
+body {
   font-family:
     system-ui,
     -apple-system,
@@ -14,9 +19,15 @@ body {
     sans-serif;
   line-height: 1.5;
   color: #213547;
-  background-color: #ffffff;
+  background-color: #0f0f10;
 }
 
 #app {
+  height: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.leaflet-container {
+  font-family: inherit;
 }

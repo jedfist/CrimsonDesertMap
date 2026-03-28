@@ -1,0 +1,4 @@
+File: pywel-map.svg
+Source: In-repo placeholder SVG created for this project (MVP). Not official game art.
+Retrieved: 2026-03-28
+Notes: Replace with a raster or SVG map you have rights to use. Update MAP_IMAGE_PATH in src/config/map.ts if the filename changes.

@@ -1,12 +1,18 @@
+<script setup lang="ts">
+import CrimsonDesertMap from '../components/CrimsonDesertMap.vue'
+</script>
+
 <template>
-  <main class="home">
-    <h2>Home</h2>
-    <p>Vue 3 + Vite + TypeScript, with Vue Router and Pinia.</p>
+  <main class="map-page">
+    <CrimsonDesertMap />
   </main>
 </template>
 
 <style scoped>
-.home {
-  padding: 1rem 1.5rem;
+.map-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 </style>

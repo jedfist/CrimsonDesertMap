@@ -1,43 +1,36 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterView } from 'vue-router'
 </script>
 
 <template>
-  <header>
-    <h1>Crimson Desert Map</h1>
-    <nav>
-      <RouterLink to="/">Home</RouterLink>
-      <RouterLink to="/about">About</RouterLink>
-    </nav>
-  </header>
-
-  <RouterView />
+  <div class="app">
+    <header class="app__header">
+      <h1 class="app__title">Crimson Desert Map</h1>
+    </header>
+    <RouterView />
+  </div>
 </template>
 
 <style scoped>
-header {
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-h1 {
-  margin: 0 0 1rem;
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-nav {
+.app {
   display: flex;
-  gap: 1rem;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
-nav a {
-  color: #42b883;
-  text-decoration: none;
+.app__header {
+  flex-shrink: 0;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid #2d2d32;
+  background: #121214;
 }
 
-nav a.router-link-exact-active {
+.app__title {
+  margin: 0;
+  font-size: 1.125rem;
   font-weight: 600;
-  text-decoration: underline;
+  color: #e8e6e3;
+  letter-spacing: 0.02em;
 }
 </style>
