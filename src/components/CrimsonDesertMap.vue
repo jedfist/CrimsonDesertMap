@@ -13,6 +13,25 @@ const loadError = ref(false)
 const manifestUrl = mapTilesManifestUrl()
 const tileUrlTemplate = publicAssetUrl('map/tiles/{z}/{x}/{y}.webp')
 const landmarksUrl = publicAssetUrl('map/thgl-data/landmarks.geojson')
+const regionBordersUrl = publicAssetUrl('map/thgl-data/region-borders.geojson')
+
+/** "Regions of Pywel" style: thick brown rim + thin light center line (SVG stroke). */
+const REGION_BORDER_OUTER = {
+  color: '#8a4b2d',
+  weight: 4,
+  lineJoin: 'round' as const,
+  lineCap: 'round' as const,
+  opacity: 1,
+  fillOpacity: 0,
+}
+const REGION_BORDER_INNER = {
+  color: '#f2f2f2',
+  weight: 1.25,
+  lineJoin: 'round' as const,
+  lineCap: 'round' as const,
+  opacity: 1,
+  fillOpacity: 0,
+}
 
 let map: L.Map | null = null
 let cancelled = false
@@ -79,6 +98,27 @@ onMounted(() => {
           onEachFeature(feature, layer) {
             const name = (feature.properties as { name?: string })?.name
             if (name) layer.bindPopup(name)
+          },
+        }).addTo(map)
+      }
+
+      const rb = await fetch(regionBordersUrl)
+      if (rb.ok) {
+        const borderGeo = (await rb.json()) as GeoJSON.GeoJSON
+        L.geoJSON(borderGeo, {
+          style: () => ({
+            ...REGION_BORDER_OUTER,
+            interactive: false,
+          }),
+        }).addTo(map)
+        L.geoJSON(borderGeo, {
+          style: () => ({
+            ...REGION_BORDER_INNER,
+            interactive: true,
+          }),
+          onEachFeature(feature, layer) {
+            const label = (feature.properties as { label?: string })?.label
+            if (label) layer.bindPopup(label)
           },
         }).addTo(map)
       }

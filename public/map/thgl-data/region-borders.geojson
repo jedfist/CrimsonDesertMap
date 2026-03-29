@@ -1,0 +1,241 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "region_cal",
+        "label": "region_cal",
+        "layer": "region-borders",
+        "source": "voronoi-from-thgl-region-centers"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              5321.537288505602,
+              0
+            ],
+            [
+              3870.9362832524534,
+              2747.8501234090486
+            ],
+            [
+              2952.8202843323957,
+              2579.6343726219443
+            ],
+            [
+              0,
+              1669.28033168333
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              5321.537288505602,
+              0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "region_crim",
+        "label": "Crimson Desert",
+        "layer": "region-borders",
+        "source": "voronoi-from-thgl-region-centers"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              8192,
+              8192
+            ],
+            [
+              4682.38080240785,
+              8192
+            ],
+            [
+              3578.563761662834,
+              4390.937895650605
+            ],
+            [
+              3701.89340564945,
+              4218.087370584662
+            ],
+            [
+              4552.751774816878,
+              3378.509608231634
+            ],
+            [
+              8192,
+              3692.5467980531303
+            ],
+            [
+              8192,
+              8192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "region_del",
+        "label": "Delesyia",
+        "layer": "region-borders",
+        "source": "voronoi-from-thgl-region-centers"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0,
+              8192
+            ],
+            [
+              0,
+              3253.027987505525
+            ],
+            [
+              3578.563761662834,
+              4390.937895650605
+            ],
+            [
+              4682.38080240785,
+              8192
+            ],
+            [
+              0,
+              8192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "region_dem",
+        "label": "Demeniss",
+        "layer": "region-borders",
+        "source": "voronoi-from-thgl-region-centers"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              3701.89340564945,
+              4218.087370584662
+            ],
+            [
+              3578.563761662834,
+              4390.937895650605
+            ],
+            [
+              0,
+              3253.027987505525
+            ],
+            [
+              0,
+              1669.28033168333
+            ],
+            [
+              2952.8202843323957,
+              2579.6343726219443
+            ],
+            [
+              3701.89340564945,
+              4218.087370584662
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "region_her",
+        "label": "Hernand",
+        "layer": "region-borders",
+        "source": "voronoi-from-thgl-region-centers"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              3701.89340564945,
+              4218.087370584662
+            ],
+            [
+              2952.8202843323957,
+              2579.6343726219443
+            ],
+            [
+              3870.9362832524534,
+              2747.8501234090486
+            ],
+            [
+              4552.751774816878,
+              3378.509608231634
+            ],
+            [
+              3701.89340564945,
+              4218.087370584662
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "region_kwe",
+        "label": "region_kwe",
+        "layer": "region-borders",
+        "source": "voronoi-from-thgl-region-centers"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              8192,
+              0
+            ],
+            [
+              8192,
+              3692.5467980531303
+            ],
+            [
+              4552.751774816878,
+              3378.509608231634
+            ],
+            [
+              3870.9362832524534,
+              2747.8501234090486
+            ],
+            [
+              5321.537288505602,
+              0
+            ],
+            [
+              8192,
+              0
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

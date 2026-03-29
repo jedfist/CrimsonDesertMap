@@ -12,7 +12,8 @@
     "generate-map-tiles:openworld": "node scripts/generate-map-tiles.mjs openworld-full.jpg",
     "stitch-thgl-openworld": "node scripts/stitch-thgl-openworld.mjs",
     "ingest-thgl-map-tiles": "node scripts/ingest-thgl-tiles.mjs",
-    "ingest-thgl-map-data": "node scripts/ingest-thgl-map-data.mjs"
+    "ingest-thgl-map-data": "node scripts/ingest-thgl-map-data.mjs",
+    "build-region-borders": "node scripts/build-region-borders.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -23,6 +24,7 @@
     "@types/leaflet": "^1.9.21",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/tsconfig": "^0.7.0",
+    "d3-delaunay": "^6.0.4",
     "sharp": "^0.34.5",
     "typescript": "~5.7.3",
     "vite": "^6.2.0",
