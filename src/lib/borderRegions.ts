@@ -1,0 +1,101 @@
+export interface BorderRegionLabel {
+  lng: number
+  lat: number
+  fontSizePx: number
+  rotationDeg?: number
+}
+
+export interface BorderRegion {
+  id: string
+  name: string
+  visible: boolean
+  ring: [number, number][]
+  label: BorderRegionLabel
+}
+
+export interface BorderRegionsFile {
+  version: number
+  regions: BorderRegion[]
+}
+
+const DEFAULT_FILE: BorderRegionsFile = { version: 1, regions: [] }
+
+export function closeRingLngLat(ring: [number, number][]): [number, number][] {
+  if (ring.length < 2) return ring
+  const [a0, a1] = ring[0]
+  const [b0, b1] = ring[ring.length - 1]
+  if (a0 === b0 && a1 === b1) return ring
+  return [...ring, [a0, a1] as [number, number]]
+}
+
+export function ringToLatLngTuples(
+  ring: [number, number][]
+): [number, number][] {
+  return ring.map(([lng, lat]) => [lat, lng] as [number, number])
+}
+
+export function latLngsToRing(
+  latlngs: { lng: number; lat: number }[]
+): [number, number][] {
+  return latlngs.map((p) => [p.lng, p.lat] as [number, number])
+}
+
+export function parseBorderRegions(raw: unknown): BorderRegionsFile {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_FILE }
+  const o = raw as Record<string, unknown>
+  const version = typeof o.version === 'number' ? o.version : 1
+  const regionsIn = o.regions
+  if (!Array.isArray(regionsIn)) return { version, regions: [] }
+
+  const regions: BorderRegion[] = []
+  for (const item of regionsIn) {
+    if (!item || typeof item !== 'object') continue
+    const r = item as Record<string, unknown>
+    const id = typeof r.id === 'string' ? r.id : crypto.randomUUID()
+    const name = typeof r.name === 'string' ? r.name : 'Unnamed'
+    const visible = typeof r.visible === 'boolean' ? r.visible : true
+    const ringRaw = r.ring
+    if (!Array.isArray(ringRaw)) continue
+    const ring: [number, number][] = []
+    for (const pt of ringRaw) {
+      if (!Array.isArray(pt) || pt.length < 2) continue
+      const lng = Number(pt[0])
+      const lat = Number(pt[1])
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue
+      ring.push([lng, lat])
+    }
+    if (ring.length < 3) continue
+    const labelObj = r.label
+    let label: BorderRegionLabel = {
+      lng: 0,
+      lat: 0,
+      fontSizePx: 14,
+    }
+    if (labelObj && typeof labelObj === 'object') {
+      const l = labelObj as Record<string, unknown>
+      const lng = Number(l.lng)
+      const lat = Number(l.lat)
+      const fontSizePx = Number(l.fontSizePx)
+      label = {
+        lng: Number.isFinite(lng) ? lng : 0,
+        lat: Number.isFinite(lat) ? lat : 0,
+        fontSizePx:
+          Number.isFinite(fontSizePx) && fontSizePx > 0 ? fontSizePx : 14,
+        rotationDeg:
+          typeof l.rotationDeg === 'number' ? l.rotationDeg : undefined,
+      }
+    }
+    regions.push({
+      id,
+      name,
+      visible,
+      ring: closeRingLngLat(ring),
+      label,
+    })
+  }
+  return { version, regions }
+}
+
+export function serializeBorderRegions(data: BorderRegionsFile): string {
+  return JSON.stringify(data, null, 2)
+}

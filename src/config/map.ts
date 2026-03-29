@@ -4,6 +4,9 @@
  */
 export const MAP_TILES_MANIFEST_PATH = 'map/tiles/manifest.json'
 
+/** User-drawn border regions (not overwritten by ingest-thgl-map-data). */
+export const BORDER_REGIONS_DATA_PATH = 'map/thgl-data/border-regions.json'
+
 /** Legacy full image; kept for regenerating tiles from source. */
 export const MAP_IMAGE_PATH = 'map/pywel-map.jpg'
 
@@ -19,6 +22,10 @@ export function mapImageUrl(): string {
 
 export function mapTilesManifestUrl(): string {
   return publicAssetUrl(MAP_TILES_MANIFEST_PATH)
+}
+
+export function borderRegionsDataUrl(): string {
+  return publicAssetUrl(BORDER_REGIONS_DATA_PATH)
 }
 
 export interface MapTilesManifest {

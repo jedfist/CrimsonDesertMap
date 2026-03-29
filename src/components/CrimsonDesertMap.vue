@@ -2,6 +2,7 @@
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import MapRegionsEditor from './MapRegionsEditor.vue'
 import {
   mapTilesManifestUrl,
   publicAssetUrl,
@@ -9,6 +10,7 @@ import {
 } from '../config/map'
 
 const mapContainer = ref<HTMLElement | null>(null)
+const leafletMap = ref<L.Map | null>(null)
 const loadError = ref(false)
 const manifestUrl = mapTilesManifestUrl()
 const tileUrlTemplate = publicAssetUrl('map/tiles/{z}/{x}/{y}.webp')
@@ -106,6 +108,9 @@ onMounted(() => {
         resizeFitRaf = requestAnimationFrame(fit)
       })
       resizeObserver.observe(el)
+
+      if (cancelled || mapContainer.value !== el) return
+      leafletMap.value = map
     } catch {
       loadError.value = true
     }
@@ -117,6 +122,7 @@ onUnmounted(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
   cancelAnimationFrame(resizeFitRaf)
+  leafletMap.value = null
   map?.remove()
   map = null
 })
@@ -142,6 +148,7 @@ onUnmounted(() => {
       class="crimson-map__pane"
       aria-hidden="true"
     />
+    <MapRegionsEditor v-if="leafletMap" :map="leafletMap" />
   </div>
 </template>
 
