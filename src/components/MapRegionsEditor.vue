@@ -2,17 +2,30 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import { borderRegionsDataUrl } from '../config/map'
-import type { BorderRegion } from '../lib/borderRegions'
+import type { BorderGeometryKind, BorderRegion } from '../lib/borderRegions'
+import {
+  DEFAULT_LABEL_FONT_ID,
+  fontsInCategory,
+  labelFontCssFamily,
+  labelIconWidthFactor,
+  MAP_LABEL_FONT_GROUPS,
+} from '../lib/mapLabelFonts'
 import {
   closeRingLngLat,
-  closedRingFromOpen,
+  DEFAULT_LINE_HIGHLIGHT_COLOR,
   DEFAULT_REGION_FILL,
   DEFAULT_REGION_FILL_OPACITY,
   DEFAULT_REGION_STROKE,
+  isPolylineRegion,
   latLngsToRing,
   parseBorderRegions,
+  pathFromOpenVertices,
+  pathVerticesOpen,
+  polylineClosedFillRingLngLat,
+  polylineFillPolygonStyle,
+  polylineHighlightStyle,
+  polylineStrokeStyle,
   regionPathStyle,
-  ringOpenLngLat,
   ringToLatLngTuples,
   serializeBorderRegions,
 } from '../lib/borderRegions'
@@ -23,7 +36,13 @@ const map = props.map as L.Map
 
 const regions = ref<BorderRegion[]>([])
 const editMode = ref(false)
-const sketch = ref<{ name: string; vertices: L.LatLng[] } | null>(null)
+const sketch = ref<{
+  name: string
+  vertices: L.LatLng[]
+  kind: BorderGeometryKind
+} | null>(null)
+/** When true, "Add region" creates an open polyline (≥2 points, no fill, no auto-close). */
+const drawOpenLine = ref(false)
 const selectedId = ref<string | null>(null)
 const loadFailed = ref(false)
 const isDev = import.meta.env.DEV
@@ -33,7 +52,15 @@ const persistStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 let regionsGroup: L.LayerGroup | null = null
 let vertexHandlesGroup: L.LayerGroup | null = null
 let sketchLine: L.Polyline | null = null
-const layersById = new Map<string, { polygon: L.Polygon; marker: L.Marker }>()
+const layersById = new Map<
+  string,
+  {
+    path: L.Polygon | L.Polyline
+    lineHighlight?: L.Polyline
+    interiorFill?: L.Polygon
+    marker: L.Marker
+  }
+>()
 let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let persistSavedClearTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -56,6 +83,10 @@ const selectedRegion = computed(() =>
   regions.value.find((r) => r.id === selectedId.value) ?? null
 )
 
+function geometryKindOf(r: BorderRegion): BorderGeometryKind {
+  return isPolylineRegion(r) ? 'polyline' : 'polygon'
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -71,10 +102,11 @@ function escapeHtml(s: string): string {
  */
 function estimateLabelIconSize(
   name: string,
-  fontSizePx: number
+  fontSizePx: number,
+  widthFactor = 1
 ): { w: number; h: number } {
   const padX = 10
-  const approxChar = fontSizePx * 0.58
+  const approxChar = fontSizePx * 0.58 * widthFactor
   const textW = name.length * approxChar + padX * 2
   const w = Math.min(560, Math.max(28, Math.ceil(textW)))
   const h = Math.ceil(fontSizePx * 1.45)
@@ -83,12 +115,15 @@ function estimateLabelIconSize(
 
 function labelDivIcon(region: BorderRegion): L.DivIcon {
   const fs = region.label.fontSizePx
-  const { w, h } = estimateLabelIconSize(region.name, fs)
+  const factor = labelIconWidthFactor(region.label.fontFamilyId)
+  const { w, h } = estimateLabelIconSize(region.name, fs, factor)
   const ax = Math.round(w / 2)
   const ay = Math.round(h / 2)
+  const family = labelFontCssFamily(region.label.fontFamilyId)
+  const safeFamily = family.replace(/"/g, '&quot;')
   return L.divIcon({
     className: 'map-regions-editor__label-wrap',
-    html: `<span class="map-regions-editor__label-inner" style="font-size:${fs}px">${escapeHtml(region.name)}</span>`,
+    html: `<span class="map-regions-editor__label-inner" style="font-size:${fs}px;font-family:${safeFamily}">${escapeHtml(region.name)}</span>`,
     iconSize: [w, h],
     iconAnchor: [ax, ay],
   })
@@ -205,20 +240,33 @@ function distPointSegPx(
   return { distSq: dx * dx + dy * dy, t }
 }
 
-function onPolygonDblClick(e: L.LeafletMouseEvent, region: BorderRegion) {
+function onPathDblClick(e: L.LeafletMouseEvent, region: BorderRegion) {
   if (!editMode.value || selectedId.value !== region.id || sketch.value) return
   L.DomEvent.stopPropagation(e)
   const ll = e.latlng
-  const open = ringOpenLngLat(region.ring)
-  if (open.length < 3) return
+  const kind = geometryKindOf(region)
+  const open = pathVerticesOpen(region.ring, kind)
+  const minVerts = kind === 'polyline' ? 2 : 3
+  if (open.length < minVerts) return
   const p = map.latLngToLayerPoint(ll)
   const n = open.length
   const maxDistSq = 22 * 22
   let bestD = Infinity
   let bestI = 0
   let bestT = 0
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n
+  const useClosingPolylineSeg =
+    kind === 'polyline' && !!region.polylineFill && n >= 3
+  const segCount =
+    kind === 'polyline' ? (useClosingPolylineSeg ? n : n - 1) : n
+  for (let i = 0; i < segCount; i++) {
+    let j: number
+    if (kind === 'polygon') {
+      j = (i + 1) % n
+    } else if (useClosingPolylineSeg && i === n - 1) {
+      j = 0
+    } else {
+      j = i + 1
+    }
     const a = L.latLng(open[i][1], open[i][0])
     const b = L.latLng(open[j][1], open[j][0])
     const pa = map.latLngToLayerPoint(a)
@@ -231,7 +279,14 @@ function onPolygonDblClick(e: L.LeafletMouseEvent, region: BorderRegion) {
     }
   }
   if (bestD > maxDistSq) return
-  const j = (bestI + 1) % n
+  let j: number
+  if (kind === 'polygon') {
+    j = (bestI + 1) % n
+  } else if (useClosingPolylineSeg && bestI === n - 1) {
+    j = 0
+  } else {
+    j = bestI + 1
+  }
   const lng = open[bestI][0] + bestT * (open[j][0] - open[bestI][0])
   const lat = open[bestI][1] + bestT * (open[j][1] - open[bestI][1])
   const insert: [number, number] = [lng, lat]
@@ -240,11 +295,40 @@ function onPolygonDblClick(e: L.LeafletMouseEvent, region: BorderRegion) {
     insert,
     ...open.slice(bestI + 1),
   ]
-  region.ring = closedRingFromOpen(next)
-  const layers = layersById.get(region.id)
-  layers?.polygon.setLatLngs(ringToLatLngTuples(region.ring))
+  region.ring = pathFromOpenVertices(next, kind)
+  setPathLatLngsForRegion(region)
   refreshVertexHandles()
   schedulePersistToDatabase()
+}
+
+function bindRegionPathEvents(
+  layer: L.Polyline | L.Polygon,
+  region: BorderRegion
+) {
+  layer.on('click', (e: L.LeafletMouseEvent) => {
+    if (!editMode.value) return
+    L.DomEvent.stopPropagation(e)
+    selectedId.value = region.id
+  })
+  layer.on('dblclick', (e: L.LeafletMouseEvent) => {
+    onPathDblClick(e, region)
+  })
+}
+
+function restackPolylineStack(layers: {
+  lineHighlight?: L.Polyline
+  interiorFill?: L.Polygon
+  path: L.Polygon | L.Polyline
+  marker: L.Marker
+}) {
+  const bringUp = (ly: unknown) =>
+    (ly as { bringToFront(): void }).bringToFront()
+  const bringDown = (ly: unknown) =>
+    (ly as { bringToBack(): void }).bringToBack()
+  if (layers.interiorFill) bringDown(layers.interiorFill)
+  if (layers.lineHighlight) bringDown(layers.lineHighlight)
+  bringUp(layers.path)
+  bringUp(layers.marker)
 }
 
 function refreshVertexHandles() {
@@ -263,7 +347,8 @@ function refreshVertexHandles() {
   if (!layers) return
 
   const vg = vertexHandlesGroup
-  const open = ringOpenLngLat(region.ring)
+  const kind = geometryKindOf(region)
+  const open = pathVerticesOpen(region.ring, kind)
   open.forEach((pt, i) => {
     const m = L.marker(L.latLng(pt[1], pt[0]), {
       icon: vertexHandleIcon(),
@@ -272,18 +357,76 @@ function refreshVertexHandles() {
     })
     m.on('drag', () => {
       const ll = m.getLatLng()
-      const o = ringOpenLngLat(region.ring)
+      const o = pathVerticesOpen(region.ring, kind)
       if (i >= o.length) return
       o[i] = [ll.lng, ll.lat]
-      region.ring = closedRingFromOpen(o)
-      const lyr = layersById.get(region.id)
-      lyr?.polygon.setLatLngs(ringToLatLngTuples(region.ring))
+      region.ring = pathFromOpenVertices(o, kind)
+      setPathLatLngsForRegion(region)
     })
     m.on('dragend', () => {
       schedulePersistToDatabase()
     })
     m.addTo(vg)
   })
+}
+
+function setPathLatLngsForRegion(region: BorderRegion) {
+  const ll = ringToLatLngTuples(region.ring)
+  const layers = layersById.get(region.id)
+  if (!layers) return
+  layers.path.setLatLngs(ll)
+  layers.lineHighlight?.setLatLngs(ll)
+  const closedFill = polylineClosedFillRingLngLat(region)
+  if (closedFill) {
+    layers.interiorFill?.setLatLngs(ringToLatLngTuples(closedFill))
+  }
+  if (isPolylineRegion(region) && region.polylineFill) {
+    const want = polylineFillPolygonStyle(region)
+    if ((!want && layers.interiorFill) || (want && !layers.interiorFill)) {
+      syncPolylineInteriorFill(region)
+    }
+  }
+}
+
+function syncPolylineHighlightLayer(region: BorderRegion) {
+  const layers = layersById.get(region.id)
+  if (!layers || !regionsGroup || !isPolylineRegion(region)) return
+  const ll = ringToLatLngTuples(region.ring)
+  const want = polylineHighlightStyle(region)
+
+  if (layers.lineHighlight) {
+    regionsGroup.removeLayer(layers.lineHighlight)
+    layers.lineHighlight = undefined
+  }
+  if (want) {
+    const h = L.polyline(ll, { ...want, interactive: false })
+    layers.lineHighlight = h
+    h.addTo(regionsGroup)
+    restackPolylineStack(layers)
+  }
+}
+
+function syncPolylineInteriorFill(region: BorderRegion) {
+  const layers = layersById.get(region.id)
+  if (!layers || !regionsGroup || !isPolylineRegion(region)) return
+  const want = polylineFillPolygonStyle(region)
+
+  if (layers.interiorFill) {
+    regionsGroup.removeLayer(layers.interiorFill)
+    layers.interiorFill = undefined
+  }
+  if (want) {
+    const closed = polylineClosedFillRingLngLat(region)
+    if (!closed) return
+    const poly = L.polygon(ringToLatLngTuples(closed), {
+      ...want,
+      interactive: true,
+    })
+    bindRegionPathEvents(poly, region)
+    layers.interiorFill = poly
+    poly.addTo(regionsGroup)
+    restackPolylineStack(layers)
+  }
 }
 
 function vertexHandleIcon(): L.DivIcon {
@@ -295,24 +438,63 @@ function vertexHandleIcon(): L.DivIcon {
   })
 }
 
-function applyRegionPolygonStyle(region: BorderRegion) {
+function applyRegionPathStyle(region: BorderRegion) {
   const layers = layersById.get(region.id)
-  if (layers) layers.polygon.setStyle(regionPathStyle(region))
+  if (!layers) return
+  if (isPolylineRegion(region)) {
+    layers.path.setStyle(polylineStrokeStyle(region))
+    const want = polylineHighlightStyle(region)
+    if (want && layers.lineHighlight) {
+      layers.lineHighlight.setStyle({ ...want, interactive: false })
+    } else if (want && !layers.lineHighlight) {
+      syncPolylineHighlightLayer(region)
+    } else if (!want && layers.lineHighlight) {
+      syncPolylineHighlightLayer(region)
+    }
+    const fillWant = polylineFillPolygonStyle(region)
+    if (fillWant && layers.interiorFill) {
+      layers.interiorFill.setStyle({ ...fillWant, interactive: true })
+    } else if (fillWant && !layers.interiorFill) {
+      syncPolylineInteriorFill(region)
+    } else if (!fillWant && layers.interiorFill) {
+      syncPolylineInteriorFill(region)
+    }
+  } else {
+    layers.path.setStyle(regionPathStyle(region))
+  }
 }
 
 function mountRegionLayers(region: BorderRegion) {
-  const poly = L.polygon(ringToLatLngTuples(region.ring), {
-    ...regionPathStyle(region),
-    interactive: true,
-  })
-  poly.on('click', (e: L.LeafletMouseEvent) => {
-    if (!editMode.value) return
-    L.DomEvent.stopPropagation(e)
-    selectedId.value = region.id
-  })
-  poly.on('dblclick', (e: L.LeafletMouseEvent) => {
-    onPolygonDblClick(e, region)
-  })
+  const latlngs = ringToLatLngTuples(region.ring)
+  let lineHighlight: L.Polyline | undefined
+  let interiorFill: L.Polygon | undefined
+  if (isPolylineRegion(region)) {
+    const hl = polylineHighlightStyle(region)
+    if (hl) {
+      lineHighlight = L.polyline(latlngs, { ...hl, interactive: false })
+    }
+    const fillSt = polylineFillPolygonStyle(region)
+    if (fillSt) {
+      const closed = polylineClosedFillRingLngLat(region)
+      if (closed) {
+        interiorFill = L.polygon(ringToLatLngTuples(closed), {
+          ...fillSt,
+          interactive: true,
+        })
+        bindRegionPathEvents(interiorFill, region)
+      }
+    }
+  }
+  const path = isPolylineRegion(region)
+    ? L.polyline(latlngs, {
+        ...polylineStrokeStyle(region),
+        interactive: true,
+      })
+    : L.polygon(latlngs, {
+        ...regionPathStyle(region),
+        interactive: true,
+      })
+  bindRegionPathEvents(path, region)
   const marker = L.marker([region.label.lat, region.label.lng], {
     icon: labelDivIcon(region),
     draggable: true,
@@ -328,10 +510,21 @@ function mountRegionLayers(region: BorderRegion) {
     L.DomEvent.stopPropagation(e)
     selectedId.value = region.id
   })
-  layersById.set(region.id, { polygon: poly, marker })
+  layersById.set(region.id, {
+    path,
+    marker,
+    ...(lineHighlight && { lineHighlight }),
+    ...(interiorFill && { interiorFill }),
+  })
   if (region.visible && regionsGroup) {
-    poly.addTo(regionsGroup)
+    if (lineHighlight) lineHighlight.addTo(regionsGroup)
+    if (interiorFill) interiorFill.addTo(regionsGroup)
+    path.addTo(regionsGroup)
     marker.addTo(regionsGroup)
+    if (isPolylineRegion(region)) {
+      const stacked = layersById.get(region.id)
+      if (stacked) restackPolylineStack(stacked)
+    }
   }
 }
 
@@ -340,10 +533,25 @@ function setRegionVisible(region: BorderRegion, visible: boolean) {
   const layers = layersById.get(region.id)
   if (!layers || !regionsGroup) return
   if (visible) {
-    if (!regionsGroup.hasLayer(layers.polygon)) layers.polygon.addTo(regionsGroup)
+    if (
+      layers.lineHighlight &&
+      !regionsGroup.hasLayer(layers.lineHighlight)
+    ) {
+      layers.lineHighlight.addTo(regionsGroup)
+    }
+    if (
+      layers.interiorFill &&
+      !regionsGroup.hasLayer(layers.interiorFill)
+    ) {
+      layers.interiorFill.addTo(regionsGroup)
+    }
+    if (!regionsGroup.hasLayer(layers.path)) layers.path.addTo(regionsGroup)
     if (!regionsGroup.hasLayer(layers.marker)) layers.marker.addTo(regionsGroup)
+    if (isPolylineRegion(region)) restackPolylineStack(layers)
   } else {
-    regionsGroup.removeLayer(layers.polygon)
+    if (layers.lineHighlight) regionsGroup.removeLayer(layers.lineHighlight)
+    if (layers.interiorFill) regionsGroup.removeLayer(layers.interiorFill)
+    regionsGroup.removeLayer(layers.path)
     regionsGroup.removeLayer(layers.marker)
   }
   schedulePersistToDatabase()
@@ -369,20 +577,40 @@ function onMapDblClick(e: L.LeafletMouseEvent) {
 
 function finishSketch() {
   const s = sketch.value
-  if (!s || s.vertices.length < 3) return
-  const ring = closeRingLngLat(latLngsToRing(s.vertices))
-  const poly = L.polygon(ringToLatLngTuples(ring))
-  const center = poly.getBounds().getCenter()
-  const region: BorderRegion = {
-    id: crypto.randomUUID(),
-    name: s.name,
-    visible: true,
-    ring,
-    label: { lng: center.lng, lat: center.lat, fontSizePx: 14 },
-    strokeColor: sketchLineColor.value,
-    fillColor: DEFAULT_REGION_FILL,
-    fillOpacity: DEFAULT_REGION_FILL_OPACITY,
+  if (!s) return
+  const isLine = s.kind === 'polyline'
+  if (isLine) {
+    if (s.vertices.length < 2) return
+  } else if (s.vertices.length < 3) {
+    return
   }
+  const ring = isLine
+    ? latLngsToRing(s.vertices)
+    : closeRingLngLat(latLngsToRing(s.vertices))
+  const boundsLayer = isLine
+    ? L.polyline(s.vertices.map((v) => [v.lat, v.lng] as [number, number]))
+    : L.polygon(ringToLatLngTuples(ring))
+  const center = boundsLayer.getBounds().getCenter()
+  const region: BorderRegion = isLine
+    ? {
+        id: crypto.randomUUID(),
+        name: s.name,
+        visible: true,
+        geometryKind: 'polyline',
+        ring,
+        label: { lng: center.lng, lat: center.lat, fontSizePx: 14 },
+        strokeColor: sketchLineColor.value,
+      }
+    : {
+        id: crypto.randomUUID(),
+        name: s.name,
+        visible: true,
+        ring,
+        label: { lng: center.lng, lat: center.lat, fontSizePx: 14 },
+        strokeColor: sketchLineColor.value,
+        fillColor: DEFAULT_REGION_FILL,
+        fillOpacity: DEFAULT_REGION_FILL_OPACITY,
+      }
   regions.value = [...regions.value, region]
   mountRegionLayers(region)
   clearSketch()
@@ -391,10 +619,15 @@ function finishSketch() {
 
 function startAddRegion() {
   if (!editMode.value) return
-  const name = window.prompt('Region name')?.trim() ?? ''
+  const isLine = drawOpenLine.value
+  const name = window.prompt(isLine ? 'Line name' : 'Region name')?.trim() ?? ''
   if (!name) return
   clearSketch()
-  sketch.value = { name, vertices: [] }
+  sketch.value = {
+    name,
+    vertices: [],
+    kind: isLine ? 'polyline' : 'polygon',
+  }
   updateMapDoubleClickZoom()
   sketchLine = L.polyline([], {
     color: sketchLineColor.value,
@@ -416,11 +649,44 @@ function onFontSizeInput(px: number) {
   schedulePersistToDatabase()
 }
 
+function onRegionLabelNameInput() {
+  const r = selectedRegion.value
+  if (!r) return
+  const layers = layersById.get(r.id)
+  if (layers) layers.marker.setIcon(labelDivIcon(r))
+  schedulePersistToDatabase()
+}
+
+function onRegionNameBlur() {
+  const r = selectedRegion.value
+  if (!r) return
+  const t = r.name.trim()
+  if (t !== r.name) r.name = t
+  if (!r.name) r.name = 'Unnamed'
+  const layers = layersById.get(r.id)
+  if (layers) layers.marker.setIcon(labelDivIcon(r))
+  schedulePersistToDatabase()
+}
+
+function onLabelFontSelect(e: Event) {
+  const r = selectedRegion.value
+  if (!r) return
+  const v = (e.target as HTMLSelectElement).value
+  if (v === DEFAULT_LABEL_FONT_ID) {
+    delete r.label.fontFamilyId
+  } else {
+    r.label.fontFamilyId = v
+  }
+  const layers = layersById.get(r.id)
+  if (layers) layers.marker.setIcon(labelDivIcon(r))
+  schedulePersistToDatabase()
+}
+
 function onRegionStrokeColor(hex: string) {
   const r = selectedRegion.value
   if (!r) return
   r.strokeColor = hex
-  applyRegionPolygonStyle(r)
+  applyRegionPathStyle(r)
   schedulePersistToDatabase()
 }
 
@@ -428,7 +694,7 @@ function onRegionFillColor(hex: string) {
   const r = selectedRegion.value
   if (!r) return
   r.fillColor = hex
-  applyRegionPolygonStyle(r)
+  applyRegionPathStyle(r)
   schedulePersistToDatabase()
 }
 
@@ -436,7 +702,47 @@ function onRegionFillOpacity(alpha: number) {
   const r = selectedRegion.value
   if (!r) return
   r.fillOpacity = Math.min(1, Math.max(0, alpha))
-  applyRegionPolygonStyle(r)
+  applyRegionPathStyle(r)
+  schedulePersistToDatabase()
+}
+
+function onPolylineFillToggle(e: Event) {
+  const r = selectedRegion.value
+  if (!r || !isPolylineRegion(r)) return
+  r.polylineFill = (e.target as HTMLInputElement).checked
+  syncPolylineInteriorFill(r)
+  schedulePersistToDatabase()
+}
+
+function onLineHighlightToggle(e: Event) {
+  const r = selectedRegion.value
+  if (!r || !isPolylineRegion(r)) return
+  r.lineHighlight = (e.target as HTMLInputElement).checked
+  syncPolylineHighlightLayer(r)
+  schedulePersistToDatabase()
+}
+
+function onLineHighlightColorHex(hex: string) {
+  const r = selectedRegion.value
+  if (!r || !isPolylineRegion(r)) return
+  r.lineHighlightColor = hex
+  applyRegionPathStyle(r)
+  schedulePersistToDatabase()
+}
+
+function onLineHighlightOpacityInput(alpha: number) {
+  const r = selectedRegion.value
+  if (!r || !isPolylineRegion(r)) return
+  r.lineHighlightOpacity = Math.min(1, Math.max(0, alpha))
+  applyRegionPathStyle(r)
+  schedulePersistToDatabase()
+}
+
+function onLineHighlightWeightInput(px: number) {
+  const r = selectedRegion.value
+  if (!r || !isPolylineRegion(r)) return
+  r.lineHighlightWeight = Math.min(48, Math.max(4, Math.round(px)))
+  applyRegionPathStyle(r)
   schedulePersistToDatabase()
 }
 
@@ -444,7 +750,9 @@ function deleteRegion(region: BorderRegion) {
   if (!window.confirm(`Delete region "${region.name}"?`)) return
   const layers = layersById.get(region.id)
   if (layers && regionsGroup) {
-    regionsGroup.removeLayer(layers.polygon)
+    if (layers.lineHighlight) regionsGroup.removeLayer(layers.lineHighlight)
+    if (layers.interiorFill) regionsGroup.removeLayer(layers.interiorFill)
+    regionsGroup.removeLayer(layers.path)
     regionsGroup.removeLayer(layers.marker)
   }
   layersById.delete(region.id)
@@ -540,17 +848,21 @@ onUnmounted(() => {
       </label>
 
       <div v-if="editMode" class="map-regions-editor__tools">
+        <label class="map-regions-editor__row map-regions-editor__row--tools">
+          <input v-model="drawOpenLine" type="checkbox" />
+          <span>Open line only (no closed border / no fill)</span>
+        </label>
         <label class="map-regions-editor__color-field">
-          <span>Draw line</span>
+          <span>Stroke</span>
           <input
             type="color"
             :value="sketchLineColor"
-            title="Color while placing vertices"
+            title="Stroke color while placing points"
             @input="setSketchLineColor(($event.target as HTMLInputElement).value)"
           />
         </label>
         <button type="button" class="map-regions-editor__btn" @click="startAddRegion">
-          Add region
+          {{ drawOpenLine ? 'Add line' : 'Add region' }}
         </button>
         <button
           v-if="sketch"
@@ -577,7 +889,13 @@ onUnmounted(() => {
           Cancel draw
         </button>
         <p v-if="sketch" class="map-regions-editor__hint">
-          Click vertices, then Finish or double-click. Ring auto-closes.
+          <template v-if="sketch.kind === 'polyline'">
+            Click points along the path (at least 2), then Finish or double-click. Stays open — no
+            fill, last point is not joined to the first.
+          </template>
+          <template v-else>
+            Click vertices, then Finish or double-click. Ring auto-closes.
+          </template>
         </p>
       </div>
 
@@ -596,7 +914,12 @@ onUnmounted(() => {
               @change="setRegionVisible(r, ($event.target as HTMLInputElement).checked)"
             />
           </label>
-          <span class="map-regions-editor__item-name">{{ r.name }}</span>
+          <span class="map-regions-editor__item-name">
+            <span v-if="isPolylineRegion(r)" class="map-regions-editor__kind-tag" title="Open line"
+              >╱</span
+            >
+            {{ r.name }}
+          </span>
           <button
             v-if="editMode"
             type="button"
@@ -613,52 +936,189 @@ onUnmounted(() => {
         v-if="editMode && selectedRegion && !sketch"
         class="map-regions-editor__shape-hint"
       >
-        Drag yellow handles to move corners. Double-click an edge (near the line)
-        to add a vertex.
+        <template v-if="isPolylineRegion(selectedRegion)">
+          <template v-if="selectedRegion.polylineFill">
+            Drag handles to move points. Double-click near any edge to insert a point, including the
+            closing segment from the last point back to the first (area fill needs at least three
+            points).
+          </template>
+          <template v-else>
+            Drag handles to move points. Double-click a segment to insert a point (open path — no
+            segment from last point back to the first).
+          </template>
+        </template>
+        <template v-else>
+          Drag yellow handles to move corners. Double-click an edge (near the line) to add a vertex.
+        </template>
       </p>
 
       <div v-if="selectedRegion" class="map-regions-editor__style">
-        <p class="map-regions-editor__style-title">Region colors</p>
+        <p class="map-regions-editor__style-title">
+          {{ isPolylineRegion(selectedRegion) ? 'Line colors' : 'Region colors' }}
+        </p>
         <label class="map-regions-editor__color-field">
-          <span>Border</span>
+          <span>Stroke</span>
           <input
             type="color"
             :value="selectedRegion.strokeColor ?? DEFAULT_REGION_STROKE"
             @input="onRegionStrokeColor(($event.target as HTMLInputElement).value)"
           />
         </label>
-        <label class="map-regions-editor__color-field">
-          <span>Fill</span>
+        <template
+          v-if="!isPolylineRegion(selectedRegion) || selectedRegion.polylineFill"
+        >
+          <label class="map-regions-editor__color-field">
+            <span>Fill</span>
+            <input
+              type="color"
+              :value="selectedRegion.fillColor ?? DEFAULT_REGION_FILL"
+              @input="onRegionFillColor(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+          <label class="map-regions-editor__opacity-field">
+            <span>
+              Fill opacity ({{
+                Math.round(
+                  100 *
+                    (selectedRegion.fillOpacity ?? DEFAULT_REGION_FILL_OPACITY)
+                )
+              }}%)
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              :value="
+                Math.round(
+                  100 * (selectedRegion.fillOpacity ?? DEFAULT_REGION_FILL_OPACITY)
+                )
+              "
+              @input="
+                onRegionFillOpacity(
+                  Number(($event.target as HTMLInputElement).value) / 100
+                )
+              "
+            />
+          </label>
+        </template>
+      </div>
+
+      <div
+        v-if="selectedRegion && isPolylineRegion(selectedRegion)"
+        class="map-regions-editor__line-hl"
+      >
+        <p class="map-regions-editor__style-title">Area inside path</p>
+        <label class="map-regions-editor__row map-regions-editor__row--tools">
           <input
-            type="color"
-            :value="selectedRegion.fillColor ?? DEFAULT_REGION_FILL"
-            @input="onRegionFillColor(($event.target as HTMLInputElement).value)"
+            type="checkbox"
+            :checked="!!selectedRegion.polylineFill"
+            @change="onPolylineFillToggle($event)"
+          />
+          <span>Highlight interior (closes last point to first; ≥3 points)</span>
+        </label>
+        <p class="map-regions-editor__style-title">Line highlight</p>
+        <label class="map-regions-editor__row map-regions-editor__row--tools">
+          <input
+            type="checkbox"
+            :checked="!!selectedRegion.lineHighlight"
+            @change="onLineHighlightToggle($event)"
+          />
+          <span>Highlight band along path</span>
+        </label>
+        <template v-if="selectedRegion.lineHighlight">
+          <label class="map-regions-editor__color-field">
+            <span>Highlight color</span>
+            <input
+              type="color"
+              :value="
+                selectedRegion.lineHighlightColor ?? DEFAULT_LINE_HIGHLIGHT_COLOR
+              "
+              @input="
+                onLineHighlightColorHex(($event.target as HTMLInputElement).value)
+              "
+            />
+          </label>
+          <label class="map-regions-editor__opacity-field">
+            <span>
+              Highlight opacity ({{
+                Math.round(
+                  100 * (selectedRegion.lineHighlightOpacity ?? 0.42)
+                )
+              }}%)
+            </span>
+            <input
+              type="range"
+              min="5"
+              max="100"
+              :value="
+                Math.round(100 * (selectedRegion.lineHighlightOpacity ?? 0.42))
+              "
+              @input="
+                onLineHighlightOpacityInput(
+                  Number(($event.target as HTMLInputElement).value) / 100
+                )
+              "
+            />
+          </label>
+          <label class="map-regions-editor__opacity-field">
+            <span>
+              Highlight width ({{ selectedRegion.lineHighlightWeight ?? 16 }}px)
+            </span>
+            <input
+              type="range"
+              min="4"
+              max="48"
+              :value="selectedRegion.lineHighlightWeight ?? 16"
+              @input="
+                onLineHighlightWeightInput(
+                  Number(($event.target as HTMLInputElement).value)
+                )
+              "
+            />
+          </label>
+          <p class="map-regions-editor__hint map-regions-editor__hint--nested">
+            A wider, soft stroke under the line emphasizes the route (not a closed fill).
+          </p>
+        </template>
+      </div>
+
+      <div v-if="selectedRegion" class="map-regions-editor__label-meta">
+        <label class="map-regions-editor__name-field">
+          <span>Name</span>
+          <input
+            v-model="selectedRegion.name"
+            type="text"
+            class="map-regions-editor__name-input"
+            maxlength="96"
+            spellcheck="true"
+            @input="onRegionLabelNameInput"
+            @blur="onRegionNameBlur"
           />
         </label>
-        <label class="map-regions-editor__opacity-field">
-          <span>
-            Fill opacity ({{
-              Math.round(
-                100 *
-                  (selectedRegion.fillOpacity ?? DEFAULT_REGION_FILL_OPACITY)
-              )
-            }}%)
-          </span>
-          <input
-            type="range"
-            min="0"
-            max="100"
+        <label class="map-regions-editor__font-select">
+          <span>Label font</span>
+          <select
+            class="map-regions-editor__font-select-input"
             :value="
-              Math.round(
-                100 * (selectedRegion.fillOpacity ?? DEFAULT_REGION_FILL_OPACITY)
-              )
+              selectedRegion.label.fontFamilyId ?? DEFAULT_LABEL_FONT_ID
             "
-            @input="
-              onRegionFillOpacity(
-                Number(($event.target as HTMLInputElement).value) / 100
-              )
-            "
-          />
+            @change="onLabelFontSelect($event)"
+          >
+            <template
+              v-for="g in MAP_LABEL_FONT_GROUPS"
+              :key="g.category"
+            >
+              <optgroup :label="g.label">
+                <option
+                  v-for="f in fontsInCategory(g.category)"
+                  :key="f.id"
+                  :value="f.id"
+                >
+                  {{ f.name }}
+                </option>
+              </optgroup>
+            </template>
+          </select>
         </label>
       </div>
 
@@ -742,6 +1202,20 @@ onUnmounted(() => {
   margin-bottom: 0.45rem;
   cursor: pointer;
   user-select: none;
+}
+
+.map-regions-editor__row--tools {
+  width: 100%;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  opacity: 0.95;
+}
+
+.map-regions-editor__kind-tag {
+  display: inline-block;
+  margin-right: 0.15rem;
+  opacity: 0.75;
+  font-size: 0.85em;
 }
 
 .map-regions-editor__tools {
@@ -831,6 +1305,19 @@ onUnmounted(() => {
   opacity: 0.9;
 }
 
+.map-regions-editor__line-hl {
+  margin-bottom: 0.5rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid #2d2d32;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.map-regions-editor__hint--nested {
+  margin-top: 0.15rem;
+}
+
 .map-regions-editor__shape-hint {
   margin: 0 0 0.45rem;
   padding: 0.35rem 0.4rem;
@@ -892,6 +1379,40 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.map-regions-editor__label-meta {
+  margin-bottom: 0.5rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid #2d2d32;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.map-regions-editor__name-field,
+.map-regions-editor__font-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  opacity: 0.95;
+}
+
+.map-regions-editor__name-input,
+.map-regions-editor__font-select-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.3rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid #4a4a52;
+  background: #1e1e22;
+  color: #e8e6e3;
+  font-size: 0.78rem;
+}
+
+.map-regions-editor__font-select-input {
+  cursor: pointer;
 }
 
 .map-regions-editor__font {
