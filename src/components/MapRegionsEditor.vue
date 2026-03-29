@@ -61,13 +61,33 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/**
+ * Leaflet needs a real iconSize + centered iconAnchor. A 1×1px icon with CSS
+ * translate(-50%,-50%) drifts under zoom because zoom transforms don't compose
+ * cleanly with percentage offsets on the divIcon.
+ */
+function estimateLabelIconSize(
+  name: string,
+  fontSizePx: number
+): { w: number; h: number } {
+  const padX = 10
+  const approxChar = fontSizePx * 0.58
+  const textW = name.length * approxChar + padX * 2
+  const w = Math.min(560, Math.max(28, Math.ceil(textW)))
+  const h = Math.ceil(fontSizePx * 1.45)
+  return { w, h }
+}
+
 function labelDivIcon(region: BorderRegion): L.DivIcon {
   const fs = region.label.fontSizePx
+  const { w, h } = estimateLabelIconSize(region.name, fs)
+  const ax = Math.round(w / 2)
+  const ay = Math.round(h / 2)
   return L.divIcon({
     className: 'map-regions-editor__label-wrap',
-    html: `<span class="map-regions-editor__label" style="font-size:${fs}px">${escapeHtml(region.name)}</span>`,
-    iconSize: [1, 1],
-    iconAnchor: [0, 0],
+    html: `<span class="map-regions-editor__label-inner" style="font-size:${fs}px">${escapeHtml(region.name)}</span>`,
+    iconSize: [w, h],
+    iconAnchor: [ax, ay],
   })
 }
 
@@ -751,22 +771,27 @@ onUnmounted(() => {
 .leaflet-div-icon.map-regions-editor__label-wrap {
   border: none;
   background: transparent;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  pointer-events: auto;
+  cursor: grab;
 }
 
-.map-regions-editor__label {
-  display: inline-block;
-  transform: translate(-50%, -50%);
+.map-regions-editor__label-inner {
+  display: block;
   white-space: nowrap;
+  line-height: 1.15;
   font-weight: 600;
   color: #f0e6d2;
   text-shadow:
     0 0 4px #1a1a1e,
     0 1px 2px #1a1a1e;
-  pointer-events: auto;
-  cursor: grab;
+  pointer-events: none;
 }
 
-.map-regions-editor__label:active {
+.leaflet-div-icon.map-regions-editor__label-wrap:active {
   cursor: grabbing;
 }
 </style>
