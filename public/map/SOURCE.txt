@@ -1,4 +1,29 @@
-File: pywel-map.svg
-Source: In-repo placeholder SVG created for this project (MVP). Not official game art.
-Retrieved: 2026-03-28
-Notes: Replace with a raster or SVG map you have rights to use. Update MAP_IMAGE_PATH in src/config/map.ts if the filename changes.
+Base map (local tiles)
+----------------------
+Leaflet serves `public/map/tiles/{z}/{x}/{y}.webp` + `manifest.json`.
+
+Full continent (matches TH.GL OpenWorld extent):
+  1. npm run ingest-thgl-map-tiles   (if `thgl-openworld/` is empty)
+  2. npm run stitch-thgl-openworld   → `openworld-full.jpg` (8192² from z=4 tiles)
+  3. npm run generate-map-tiles      (uses `openworld-full.jpg` when present, else `pywel-map.jpg`)
+
+Tile generator adds a margin of solid tiles around the world so Leaflet’s edge/buffer
+requests never 404 (fixes “holes” and broken base next to the map).
+
+Legacy crop: `pywel-map.jpg` may show only part of the continent; delete or rename
+`openworld-full.jpg` to fall back to it.
+
+Requires Node + devDependency `sharp`.
+
+TH.GL — data only (no site code)
+--------------------------------
+Reference: https://crimsondesert.th.gl/maps/Continent%20of%20Pywel
+
+  npm run ingest-thgl-map-tiles   — raster mirror → `thgl-openworld/`
+  npm run ingest-thgl-map-data    — version.json, tiles.json, nodes .raw, landmarks.geojson
+
+CDN: `https://cdn.th.gl/crimson-desert/` (version.json, config/tiles.json, map-tiles/…, nodes/…)
+
+`landmarks.geojson` uses the same pixel size as `map/tiles/manifest.json` for projection.
+
+Verify TH.GL terms before redistributing mirrored data.

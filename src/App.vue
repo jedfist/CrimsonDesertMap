@@ -7,7 +7,9 @@ import { RouterView } from 'vue-router'
     <header class="app__header">
       <h1 class="app__title">Crimson Desert Map</h1>
     </header>
-    <RouterView />
+    <div class="app__body">
+      <RouterView />
+    </div>
   </div>
 </template>
 
@@ -17,6 +19,15 @@ import { RouterView } from 'vue-router'
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+.app__body {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .app__header {

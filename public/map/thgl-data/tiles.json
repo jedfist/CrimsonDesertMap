@@ -1,0 +1,38 @@
+{
+  "OpenWorld": {
+    "url": "/map-tiles/OpenWorld-41e5ec09378ad9807546b88f380b04c3/{z}/{y}/{x}.webp",
+    "options": {
+      "minNativeZoom": 0,
+      "maxNativeZoom": 5,
+      "bounds": [
+        [
+          -11244,
+          -16364
+        ],
+        [
+          8174,
+          3054
+        ]
+      ],
+      "tileSize": 512
+    },
+    "minZoom": -5,
+    "maxZoom": 12,
+    "fitBounds": [
+      [
+        -11244,
+        -16364
+      ],
+      [
+        8174,
+        3054
+      ]
+    ],
+    "transformation": [
+      0.026364572605561278,
+      431.45623069001033,
+      -0.026364572605561278,
+      215.53038105046343
+    ]
+  }
+}

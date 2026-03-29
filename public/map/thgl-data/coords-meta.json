@@ -1,0 +1,18 @@
+{
+  "source": "https://cdn.th.gl/crimson-desert/version.json",
+  "thBounds": {
+    "sw": [
+      -11244,
+      -16364
+    ],
+    "ne": [
+      8174,
+      3054
+    ]
+  },
+  "pywelSize": {
+    "width": 8192,
+    "height": 8192
+  },
+  "note": "Landmark positions are linearly mapped from TH game coords to Pywel pixel space; alignment depends on pywel-map matching OpenWorld extent."
+}

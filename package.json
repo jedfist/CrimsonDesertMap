@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "type-check": "vue-tsc --build"
+    "type-check": "vue-tsc --build",
+    "generate-map-tiles": "node scripts/generate-map-tiles.mjs",
+    "generate-map-tiles:openworld": "node scripts/generate-map-tiles.mjs openworld-full.jpg",
+    "stitch-thgl-openworld": "node scripts/stitch-thgl-openworld.mjs",
+    "ingest-thgl-map-tiles": "node scripts/ingest-thgl-tiles.mjs",
+    "ingest-thgl-map-data": "node scripts/ingest-thgl-map-data.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -18,6 +23,7 @@
     "@types/leaflet": "^1.9.21",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/tsconfig": "^0.7.0",
+    "sharp": "^0.34.5",
     "typescript": "~5.7.3",
     "vite": "^6.2.0",
     "vue-tsc": "^2.2.0"

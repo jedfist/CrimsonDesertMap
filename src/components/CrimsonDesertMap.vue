@@ -2,23 +2,27 @@
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { mapImageUrl } from '../config/map'
+import {
+  mapTilesManifestUrl,
+  publicAssetUrl,
+  type MapTilesManifest,
+} from '../config/map'
 
 const mapContainer = ref<HTMLElement | null>(null)
 const loadError = ref(false)
-const imageUrl = mapImageUrl()
+const manifestUrl = mapTilesManifestUrl()
+const tileUrlTemplate = publicAssetUrl('map/tiles/{z}/{x}/{y}.webp')
+const landmarksUrl = publicAssetUrl('map/thgl-data/landmarks.geojson')
 
 let map: L.Map | null = null
 let cancelled = false
+let resizeObserver: ResizeObserver | null = null
+let resizeFitRaf = 0
 
-function loadImageDimensions(src: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () =>
-      resolve({ width: img.naturalWidth, height: img.naturalHeight })
-    img.onerror = () => reject(new Error('Map image failed to load'))
-    img.src = src
-  })
+async function loadManifest(): Promise<MapTilesManifest> {
+  const r = await fetch(manifestUrl)
+  if (!r.ok) throw new Error('Map tiles manifest not found')
+  return r.json() as Promise<MapTilesManifest>
 }
 
 onMounted(() => {
@@ -27,32 +31,81 @@ onMounted(() => {
 
   void (async () => {
     try {
-      const { width, height } = await loadImageDimensions(imageUrl)
+      const manifest = await loadManifest()
       if (cancelled || mapContainer.value !== el) return
+
+      const { width: w, height: h, tileSize, minNativeZoom, maxNativeZoom } =
+        manifest
 
       const bounds: L.LatLngBoundsExpression = [
         [0, 0],
-        [height, width],
+        [h, w],
       ]
 
       map = L.map(el, {
         crs: L.CRS.Simple,
-        minZoom: -4,
-        maxZoom: 6,
+        minZoom: minNativeZoom,
+        maxZoom: maxNativeZoom + 4,
+        maxBounds: bounds,
+        maxBoundsViscosity: 1.0,
         zoomControl: true,
         attributionControl: false,
-        preferCanvas: true,
+        preferCanvas: false,
       })
 
-      L.imageOverlay(imageUrl, bounds).addTo(map)
+      L.tileLayer(tileUrlTemplate, {
+        tileSize,
+        noWrap: true,
+        minZoom: minNativeZoom,
+        maxZoom: maxNativeZoom + 4,
+        maxNativeZoom,
+      }).addTo(map)
+
+      const lg = await fetch(landmarksUrl)
+      if (lg.ok) {
+        const geo = (await lg.json()) as GeoJSON.GeoJSON
+        L.geoJSON(geo, {
+          pointToLayer(feature, latlng) {
+            const layerName = (feature.properties as { layer?: string })?.layer
+            const isRegion = layerName === 'regions'
+            return L.circleMarker(latlng, {
+              radius: isRegion ? 5 : 4,
+              color: isRegion ? '#7eb8da' : '#a68b5b',
+              weight: 1,
+              fillColor: isRegion ? '#3d5c73' : '#f0e6d2',
+              fillOpacity: 0.9,
+            })
+          },
+          onEachFeature(feature, layer) {
+            const name = (feature.properties as { name?: string })?.name
+            if (name) layer.bindPopup(name)
+          },
+        }).addTo(map)
+      }
+
+      const fit = () => {
+        if (!map || cancelled) return
+        const pane = mapContainer.value
+        if (!pane) return
+        const { width, height } = pane.getBoundingClientRect()
+        if (width < 32 || height < 32) return
+        map.invalidateSize()
+        map.fitBounds(bounds, { animate: false, padding: [8, 8] })
+      }
+
       map.fitBounds(bounds)
-      map.setMaxBounds(bounds)
 
       await nextTick()
       requestAnimationFrame(() => {
-        map?.invalidateSize()
-        map?.fitBounds(bounds)
+        fit()
+        requestAnimationFrame(fit)
       })
+
+      resizeObserver = new ResizeObserver(() => {
+        cancelAnimationFrame(resizeFitRaf)
+        resizeFitRaf = requestAnimationFrame(fit)
+      })
+      resizeObserver.observe(el)
     } catch {
       loadError.value = true
     }
@@ -61,6 +114,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelled = true
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  cancelAnimationFrame(resizeFitRaf)
   map?.remove()
   map = null
 })
@@ -73,9 +129,10 @@ onUnmounted(() => {
       class="crimson-map__error"
       role="alert"
     >
-      <p>Could not load the map image.</p>
+      <p>Could not load the map tiles.</p>
       <p class="crimson-map__hint">
-        Expected file at <code>{{ imageUrl }}</code> (see <code>public/map/</code> and
+        Run <code>npm run generate-map-tiles</code> and ensure
+        <code>{{ manifestUrl }}</code> exists (see <code>public/map/</code> and
         <code>SOURCE.txt</code>).
       </p>
     </div>
@@ -91,17 +148,14 @@ onUnmounted(() => {
 <style scoped>
 .crimson-map {
   position: relative;
-  display: flex;
-  flex-direction: column;
   flex: 1;
   width: 100%;
   min-height: 0;
 }
 
 .crimson-map__pane {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
   background: #1a1a1e;
 }
 

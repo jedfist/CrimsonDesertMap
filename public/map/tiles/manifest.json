@@ -1,0 +1,9 @@
+{
+  "width": 8192,
+  "height": 8192,
+  "tileSize": 256,
+  "minNativeZoom": -5,
+  "maxNativeZoom": 0,
+  "format": "webp",
+  "tileUrlPattern": "{base}map/tiles/{z}/{x}/{y}.webp"
+}

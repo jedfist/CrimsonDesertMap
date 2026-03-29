@@ -1,11 +1,32 @@
 /**
- * Path relative to `public/` (served at `import.meta.env.BASE_URL` + this path).
- * Swap the file under public/map/ and keep this in sync, or use the same filename.
+ * Local map tiles (see `npm run generate-map-tiles`) and optional TH.GL mirror paths.
+ * Paths are relative to `public/` (served at `import.meta.env.BASE_URL` + path).
  */
+export const MAP_TILES_MANIFEST_PATH = 'map/tiles/manifest.json'
+
+/** Legacy full image; kept for regenerating tiles from source. */
 export const MAP_IMAGE_PATH = 'map/pywel-map.jpg'
 
-export function mapImageUrl(): string {
+export function publicAssetUrl(relativePath: string): string {
   const base = import.meta.env.BASE_URL
   const prefix = base.endsWith('/') ? base : `${base}/`
-  return `${prefix}${MAP_IMAGE_PATH}`
+  return `${prefix}${relativePath.replace(/^\//, '')}`
+}
+
+export function mapImageUrl(): string {
+  return publicAssetUrl(MAP_IMAGE_PATH)
+}
+
+export function mapTilesManifestUrl(): string {
+  return publicAssetUrl(MAP_TILES_MANIFEST_PATH)
+}
+
+export interface MapTilesManifest {
+  width: number
+  height: number
+  tileSize: number
+  minNativeZoom: number
+  maxNativeZoom: number
+  format: string
+  tileUrlPattern: string
 }
