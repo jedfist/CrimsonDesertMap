@@ -5,12 +5,22 @@ export interface BorderRegionLabel {
   rotationDeg?: number
 }
 
+export const DEFAULT_REGION_STROKE = '#7eb8da'
+export const DEFAULT_REGION_FILL = '#3d5c73'
+export const DEFAULT_REGION_FILL_OPACITY = 0.25
+
 export interface BorderRegion {
   id: string
   name: string
   visible: boolean
   ring: [number, number][]
   label: BorderRegionLabel
+  /** Polygon outline color (Leaflet `color`). */
+  strokeColor?: string
+  /** Polygon fill color (Leaflet `fillColor`). */
+  fillColor?: string
+  /** Fill alpha 0–1 (Leaflet `fillOpacity`). */
+  fillOpacity?: number
 }
 
 export interface BorderRegionsFile {
@@ -65,6 +75,20 @@ export function parseBorderRegions(raw: unknown): BorderRegionsFile {
       ring.push([lng, lat])
     }
     if (ring.length < 3) continue
+
+    let strokeColor: string | undefined
+    if (typeof r.strokeColor === 'string' && r.strokeColor.length >= 4) {
+      strokeColor = r.strokeColor
+    }
+    let fillColor: string | undefined
+    if (typeof r.fillColor === 'string' && r.fillColor.length >= 4) {
+      fillColor = r.fillColor
+    }
+    let fillOpacity: number | undefined
+    if (typeof r.fillOpacity === 'number' && Number.isFinite(r.fillOpacity)) {
+      fillOpacity = Math.min(1, Math.max(0, r.fillOpacity))
+    }
+
     const labelObj = r.label
     let label: BorderRegionLabel = {
       lng: 0,
@@ -91,6 +115,9 @@ export function parseBorderRegions(raw: unknown): BorderRegionsFile {
       visible,
       ring: closeRingLngLat(ring),
       label,
+      ...(strokeColor !== undefined ? { strokeColor } : {}),
+      ...(fillColor !== undefined ? { fillColor } : {}),
+      ...(fillOpacity !== undefined ? { fillOpacity } : {}),
     })
   }
   return { version, regions }
@@ -98,4 +125,22 @@ export function parseBorderRegions(raw: unknown): BorderRegionsFile {
 
 export function serializeBorderRegions(data: BorderRegionsFile): string {
   return JSON.stringify(data, null, 2)
+}
+
+export function regionPathStyle(region: BorderRegion): {
+  color: string
+  weight: number
+  fillColor: string
+  fillOpacity: number
+} {
+  const fillOpacity =
+    typeof region.fillOpacity === 'number' && Number.isFinite(region.fillOpacity)
+      ? Math.min(1, Math.max(0, region.fillOpacity))
+      : DEFAULT_REGION_FILL_OPACITY
+  return {
+    color: region.strokeColor ?? DEFAULT_REGION_STROKE,
+    weight: 2,
+    fillColor: region.fillColor ?? DEFAULT_REGION_FILL,
+    fillOpacity,
+  }
 }

@@ -5,8 +5,12 @@ import { borderRegionsDataUrl } from '../config/map'
 import type { BorderRegion } from '../lib/borderRegions'
 import {
   closeRingLngLat,
+  DEFAULT_REGION_FILL,
+  DEFAULT_REGION_FILL_OPACITY,
+  DEFAULT_REGION_STROKE,
   latLngsToRing,
   parseBorderRegions,
+  regionPathStyle,
   ringToLatLngTuples,
   serializeBorderRegions,
 } from '../lib/borderRegions'
@@ -29,6 +33,21 @@ let sketchLine: L.Polyline | null = null
 const layersById = new Map<string, { polygon: L.Polygon; marker: L.Marker }>()
 let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let persistSavedClearTimer: ReturnType<typeof setTimeout> | null = null
+
+const SKETCH_LINE_COLOR_KEY = 'crimson-map-sketch-line-color'
+const DEFAULT_SKETCH_LINE_COLOR = '#e8c547'
+
+function readStoredSketchLineColor(): string {
+  try {
+    const s = localStorage.getItem(SKETCH_LINE_COLOR_KEY)
+    if (typeof s === 'string' && s.startsWith('#') && s.length >= 4) return s
+  } catch {
+    /* private mode */
+  }
+  return DEFAULT_SKETCH_LINE_COLOR
+}
+
+const sketchLineColor = ref(readStoredSketchLineColor())
 
 const selectedRegion = computed(() =>
   regions.value.find((r) => r.id === selectedId.value) ?? null
@@ -99,6 +118,26 @@ function syncSketchLine() {
   sketchLine.setLatLngs(s.vertices.map((v) => [v.lat, v.lng]))
 }
 
+function undoSketchVertex() {
+  const s = sketch.value
+  if (!s || s.vertices.length === 0) return
+  s.vertices.pop()
+  syncSketchLine()
+}
+
+function setSketchLineColor(hex: string) {
+  sketchLineColor.value = hex
+}
+
+watch(sketchLineColor, (c) => {
+  try {
+    localStorage.setItem(SKETCH_LINE_COLOR_KEY, c)
+  } catch {
+    /* ignore */
+  }
+  sketchLine?.setStyle({ color: c })
+})
+
 function clearSketch() {
   if (sketchLine) {
     map.removeLayer(sketchLine)
@@ -108,13 +147,13 @@ function clearSketch() {
   map.doubleClickZoom.enable()
 }
 
+function applyRegionPolygonStyle(region: BorderRegion) {
+  const layers = layersById.get(region.id)
+  if (layers) layers.polygon.setStyle(regionPathStyle(region))
+}
+
 function mountRegionLayers(region: BorderRegion) {
-  const poly = L.polygon(ringToLatLngTuples(region.ring), {
-    color: '#7eb8da',
-    weight: 2,
-    fillColor: '#3d5c73',
-    fillOpacity: 0.25,
-  })
+  const poly = L.polygon(ringToLatLngTuples(region.ring), regionPathStyle(region))
   const marker = L.marker([region.label.lat, region.label.lng], {
     icon: labelDivIcon(region),
     draggable: true,
@@ -180,6 +219,9 @@ function finishSketch() {
     visible: true,
     ring,
     label: { lng: center.lng, lat: center.lat, fontSizePx: 14 },
+    strokeColor: sketchLineColor.value,
+    fillColor: DEFAULT_REGION_FILL,
+    fillOpacity: DEFAULT_REGION_FILL_OPACITY,
   }
   regions.value = [...regions.value, region]
   mountRegionLayers(region)
@@ -195,7 +237,7 @@ function startAddRegion() {
   map.doubleClickZoom.disable()
   sketch.value = { name, vertices: [] }
   sketchLine = L.polyline([], {
-    color: '#e8c547',
+    color: sketchLineColor.value,
     weight: 2,
     dashArray: '6 4',
   }).addTo(map)
@@ -211,6 +253,43 @@ function onFontSizeInput(px: number) {
   r.label.fontSizePx = Math.min(32, Math.max(10, Math.round(px)))
   const layers = layersById.get(r.id)
   if (layers) layers.marker.setIcon(labelDivIcon(r))
+  schedulePersistToDatabase()
+}
+
+function onRegionStrokeColor(hex: string) {
+  const r = selectedRegion.value
+  if (!r) return
+  r.strokeColor = hex
+  applyRegionPolygonStyle(r)
+  schedulePersistToDatabase()
+}
+
+function onRegionFillColor(hex: string) {
+  const r = selectedRegion.value
+  if (!r) return
+  r.fillColor = hex
+  applyRegionPolygonStyle(r)
+  schedulePersistToDatabase()
+}
+
+function onRegionFillOpacity(alpha: number) {
+  const r = selectedRegion.value
+  if (!r) return
+  r.fillOpacity = Math.min(1, Math.max(0, alpha))
+  applyRegionPolygonStyle(r)
+  schedulePersistToDatabase()
+}
+
+function deleteRegion(region: BorderRegion) {
+  if (!window.confirm(`Delete region "${region.name}"?`)) return
+  const layers = layersById.get(region.id)
+  if (layers && regionsGroup) {
+    regionsGroup.removeLayer(layers.polygon)
+    regionsGroup.removeLayer(layers.marker)
+  }
+  layersById.delete(region.id)
+  regions.value = regions.value.filter((x) => x.id !== region.id)
+  if (selectedId.value === region.id) selectedId.value = null
   schedulePersistToDatabase()
 }
 
@@ -281,6 +360,15 @@ onUnmounted(() => {
       </label>
 
       <div v-if="editMode" class="map-regions-editor__tools">
+        <label class="map-regions-editor__color-field">
+          <span>Draw line</span>
+          <input
+            type="color"
+            :value="sketchLineColor"
+            title="Color while placing vertices"
+            @input="setSketchLineColor(($event.target as HTMLInputElement).value)"
+          />
+        </label>
         <button type="button" class="map-regions-editor__btn" @click="startAddRegion">
           Add region
         </button>
@@ -291,6 +379,14 @@ onUnmounted(() => {
           @click="finishSketch"
         >
           Finish
+        </button>
+        <button
+          v-if="sketch && sketch.vertices.length > 0"
+          type="button"
+          class="map-regions-editor__btn map-regions-editor__btn--ghost"
+          @click="undoSketchVertex"
+        >
+          Undo point
         </button>
         <button
           v-if="sketch"
@@ -321,7 +417,61 @@ onUnmounted(() => {
             />
           </label>
           <span class="map-regions-editor__item-name">{{ r.name }}</span>
+          <button
+            v-if="editMode"
+            type="button"
+            class="map-regions-editor__btn map-regions-editor__btn--danger map-regions-editor__btn--icon"
+            title="Delete region"
+            @click.stop="deleteRegion(r)"
+          >
+            ×
+          </button>
         </div>
+      </div>
+
+      <div v-if="selectedRegion" class="map-regions-editor__style">
+        <p class="map-regions-editor__style-title">Region colors</p>
+        <label class="map-regions-editor__color-field">
+          <span>Border</span>
+          <input
+            type="color"
+            :value="selectedRegion.strokeColor ?? DEFAULT_REGION_STROKE"
+            @input="onRegionStrokeColor(($event.target as HTMLInputElement).value)"
+          />
+        </label>
+        <label class="map-regions-editor__color-field">
+          <span>Fill</span>
+          <input
+            type="color"
+            :value="selectedRegion.fillColor ?? DEFAULT_REGION_FILL"
+            @input="onRegionFillColor(($event.target as HTMLInputElement).value)"
+          />
+        </label>
+        <label class="map-regions-editor__opacity-field">
+          <span>
+            Fill opacity ({{
+              Math.round(
+                100 *
+                  (selectedRegion.fillOpacity ?? DEFAULT_REGION_FILL_OPACITY)
+              )
+            }}%)
+          </span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            :value="
+              Math.round(
+                100 * (selectedRegion.fillOpacity ?? DEFAULT_REGION_FILL_OPACITY)
+              )
+            "
+            @input="
+              onRegionFillOpacity(
+                Number(($event.target as HTMLInputElement).value) / 100
+              )
+            "
+          />
+        </label>
       </div>
 
       <div v-if="selectedRegion" class="map-regions-editor__font">
@@ -430,6 +580,67 @@ onUnmounted(() => {
 .map-regions-editor__btn--ghost {
   border-color: #4a4a52;
   background: transparent;
+}
+
+.map-regions-editor__btn--danger {
+  border-color: #6b3a38;
+  color: #f0c4c0;
+  background: rgba(120, 48, 48, 0.35);
+  padding: 0.1rem 0.35rem;
+  min-width: 1.5rem;
+  line-height: 1.2;
+}
+
+.map-regions-editor__btn--danger:hover {
+  background: rgba(140, 56, 56, 0.5);
+}
+
+.map-regions-editor__btn--icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.map-regions-editor__color-field,
+.map-regions-editor__opacity-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  font-size: 0.72rem;
+  opacity: 0.95;
+}
+
+.map-regions-editor__color-field input[type='color'] {
+  width: 2rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 1px solid #4a4a52;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.map-regions-editor__opacity-field input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-regions-editor__style {
+  margin-bottom: 0.5rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid #2d2d32;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.map-regions-editor__style-title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.9;
 }
 
 .map-regions-editor__hint {
