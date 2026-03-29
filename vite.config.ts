@@ -1,15 +1,7 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { IncomingMessage } from 'node:http'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const borderRegionsFile = path.resolve(
-  __dirname,
-  'public/map/thgl-data/border-regions.json'
-)
+import { saveBorderRegionsDocument } from './server/borderRegionsDb'
 
 function readReqBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -36,11 +28,7 @@ export default defineConfig({
           try {
             const raw = await readReqBody(req)
             const parsed = JSON.parse(raw) as unknown
-            fs.writeFileSync(
-              borderRegionsFile,
-              JSON.stringify(parsed, null, 2),
-              'utf8'
-            )
+            await saveBorderRegionsDocument(parsed)
             res.statusCode = 200
             res.setHeader('Content-Type', 'text/plain')
             res.end('ok')

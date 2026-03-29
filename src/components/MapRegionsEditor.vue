@@ -20,12 +20,15 @@ const editMode = ref(false)
 const sketch = ref<{ name: string; vertices: L.LatLng[] } | null>(null)
 const selectedId = ref<string | null>(null)
 const loadFailed = ref(false)
-const saveDevMessage = ref<string | null>(null)
 const isDev = import.meta.env.DEV
+/** Dev-only: LowDB persists to public/map/thgl-data/border-regions.json */
+const persistStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
 let regionsGroup: L.LayerGroup | null = null
 let sketchLine: L.Polyline | null = null
 const layersById = new Map<string, { polygon: L.Polygon; marker: L.Marker }>()
+let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let persistSavedClearTimer: ReturnType<typeof setTimeout> | null = null
 
 const selectedRegion = computed(() =>
   regions.value.find((r) => r.id === selectedId.value) ?? null
@@ -53,6 +56,41 @@ function devSavePath(): string {
   const base = import.meta.env.BASE_URL
   const prefix = base.endsWith('/') ? base : `${base}/`
   return `${prefix}__save/border-regions`
+}
+
+function schedulePersistToDatabase() {
+  if (!isDev) return
+  if (persistDebounceTimer) clearTimeout(persistDebounceTimer)
+  persistDebounceTimer = setTimeout(() => {
+    persistDebounceTimer = null
+    void flushPersistToDatabase()
+  }, 450)
+}
+
+async function flushPersistToDatabase() {
+  persistStatus.value = 'saving'
+  try {
+    const r = await fetch(devSavePath(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: serializeBorderRegions({
+        version: 1,
+        regions: regions.value,
+      }),
+    })
+    if (r.ok) {
+      persistStatus.value = 'saved'
+      if (persistSavedClearTimer) clearTimeout(persistSavedClearTimer)
+      persistSavedClearTimer = setTimeout(() => {
+        if (persistStatus.value === 'saved') persistStatus.value = 'idle'
+        persistSavedClearTimer = null
+      }, 2500)
+    } else {
+      persistStatus.value = 'error'
+    }
+  } catch {
+    persistStatus.value = 'error'
+  }
 }
 
 function syncSketchLine() {
@@ -86,6 +124,7 @@ function mountRegionLayers(region: BorderRegion) {
     const ll = marker.getLatLng()
     region.label.lng = ll.lng
     region.label.lat = ll.lat
+    schedulePersistToDatabase()
   })
   marker.on('click', (e: L.LeafletMouseEvent) => {
     L.DomEvent.stopPropagation(e)
@@ -109,6 +148,7 @@ function setRegionVisible(region: BorderRegion, visible: boolean) {
     regionsGroup.removeLayer(layers.polygon)
     regionsGroup.removeLayer(layers.marker)
   }
+  schedulePersistToDatabase()
 }
 
 function teardownRegions() {
@@ -144,6 +184,7 @@ function finishSketch() {
   regions.value = [...regions.value, region]
   mountRegionLayers(region)
   clearSketch()
+  schedulePersistToDatabase()
 }
 
 function startAddRegion() {
@@ -170,6 +211,7 @@ function onFontSizeInput(px: number) {
   r.label.fontSizePx = Math.min(32, Math.max(10, Math.round(px)))
   const layers = layersById.get(r.id)
   if (layers) layers.marker.setIcon(labelDivIcon(r))
+  schedulePersistToDatabase()
 }
 
 function downloadJson() {
@@ -182,26 +224,6 @@ function downloadJson() {
   a.download = 'border-regions.json'
   a.click()
   URL.revokeObjectURL(a.href)
-}
-
-async function saveToPublicDev() {
-  saveDevMessage.value = null
-  try {
-    const body = serializeBorderRegions({
-      version: 1,
-      regions: regions.value,
-    })
-    const r = await fetch(devSavePath(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    })
-    saveDevMessage.value = r.ok
-      ? 'Saved to public/map/thgl-data/border-regions.json'
-      : `Save failed (${r.status})`
-  } catch {
-    saveDevMessage.value = 'Save failed (network)'
-  }
 }
 
 function selectRow(id: string) {
@@ -234,6 +256,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (persistDebounceTimer) clearTimeout(persistDebounceTimer)
+  if (persistSavedClearTimer) clearTimeout(persistSavedClearTimer)
   map.off('click', onMapClick)
   map.off('dblclick', onMapDblClick)
   clearSketch()
@@ -314,25 +338,26 @@ onUnmounted(() => {
       </div>
 
       <div class="map-regions-editor__save">
+        <p v-if="isDev" class="map-regions-editor__persist">
+          <span v-if="persistStatus === 'idle'" class="map-regions-editor__persist-idle">
+            LowDB: edits auto-save to <code>border-regions.json</code> (commit to keep).
+          </span>
+          <span v-else-if="persistStatus === 'saving'" class="map-regions-editor__persist-saving">
+            Saving…
+          </span>
+          <span v-else-if="persistStatus === 'saved'" class="map-regions-editor__persist-saved">
+            Saved to repo file.
+          </span>
+          <span v-else class="map-regions-editor__persist-err">
+            Save failed — use Download or check the dev server.
+          </span>
+        </p>
         <button type="button" class="map-regions-editor__btn" @click="downloadJson">
           Download border-regions.json
         </button>
-        <template v-if="isDev">
-          <button
-            type="button"
-            class="map-regions-editor__btn map-regions-editor__btn--ghost"
-            @click="saveToPublicDev"
-          >
-            Save to public (dev only)
-          </button>
-          <p v-if="saveDevMessage" class="map-regions-editor__save-msg">
-            {{ saveDevMessage }}
-          </p>
-          <p class="map-regions-editor__hint">
-            Dev server writes <code>public/map/thgl-data/border-regions.json</code>.
-            Not for production.
-          </p>
-        </template>
+        <p v-if="isDev" class="map-regions-editor__hint">
+          Production builds cannot write disk; use dev or Download.
+        </p>
       </div>
     </div>
   </div>
@@ -485,10 +510,28 @@ onUnmounted(() => {
   border-top: 1px solid #2d2d32;
 }
 
-.map-regions-editor__save-msg {
-  margin: 0;
-  font-size: 0.72rem;
+.map-regions-editor__persist {
+  margin: 0 0 0.35rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  opacity: 0.9;
+}
+
+.map-regions-editor__persist-saved {
   color: #9bc99b;
+}
+
+.map-regions-editor__persist-saving {
+  color: #c9c5bd;
+}
+
+.map-regions-editor__persist-err {
+  color: #e8a598;
+}
+
+.map-regions-editor__persist code {
+  font-size: 0.68em;
+  word-break: break-all;
 }
 </style>
 
