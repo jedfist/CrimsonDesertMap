@@ -38,6 +38,21 @@ export function closeRingLngLat(ring: [number, number][]): [number, number][] {
   return [...ring, [a0, a1] as [number, number]]
 }
 
+/** Open ring for editing (drops duplicate closing point). Points are [lng, lat]. */
+export function ringOpenLngLat(ring: [number, number][]): [number, number][] {
+  const closed = closeRingLngLat(ring)
+  if (closed.length < 2) return [...closed]
+  const [a0, a1] = closed[0]
+  const [b0, b1] = closed[closed.length - 1]
+  if (a0 === b0 && a1 === b1) return closed.slice(0, -1)
+  return [...closed]
+}
+
+/** Close an open vertex list into a stored ring. */
+export function closedRingFromOpen(open: [number, number][]): [number, number][] {
+  return closeRingLngLat(open)
+}
+
 export function ringToLatLngTuples(
   ring: [number, number][]
 ): [number, number][] {

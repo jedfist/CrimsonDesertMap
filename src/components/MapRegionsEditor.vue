@@ -5,12 +5,14 @@ import { borderRegionsDataUrl } from '../config/map'
 import type { BorderRegion } from '../lib/borderRegions'
 import {
   closeRingLngLat,
+  closedRingFromOpen,
   DEFAULT_REGION_FILL,
   DEFAULT_REGION_FILL_OPACITY,
   DEFAULT_REGION_STROKE,
   latLngsToRing,
   parseBorderRegions,
   regionPathStyle,
+  ringOpenLngLat,
   ringToLatLngTuples,
   serializeBorderRegions,
 } from '../lib/borderRegions'
@@ -29,6 +31,7 @@ const isDev = import.meta.env.DEV
 const persistStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
 let regionsGroup: L.LayerGroup | null = null
+let vertexHandlesGroup: L.LayerGroup | null = null
 let sketchLine: L.Polyline | null = null
 const layersById = new Map<string, { polygon: L.Polygon; marker: L.Marker }>()
 let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -158,13 +161,138 @@ watch(sketchLineColor, (c) => {
   sketchLine?.setStyle({ color: c })
 })
 
+function updateMapDoubleClickZoom() {
+  if (sketch.value) {
+    map.doubleClickZoom.disable()
+    return
+  }
+  if (editMode.value && selectedId.value) {
+    map.doubleClickZoom.disable()
+    return
+  }
+  map.doubleClickZoom.enable()
+}
+
 function clearSketch() {
   if (sketchLine) {
     map.removeLayer(sketchLine)
     sketchLine = null
   }
   sketch.value = null
-  map.doubleClickZoom.enable()
+  updateMapDoubleClickZoom()
+}
+
+function clearVertexHandles() {
+  vertexHandlesGroup?.clearLayers()
+}
+
+function distPointSegPx(
+  p: L.Point,
+  a: L.Point,
+  b: L.Point
+): { distSq: number; t: number } {
+  const vx = b.x - a.x
+  const vy = b.y - a.y
+  const wx = p.x - a.x
+  const wy = p.y - a.y
+  const c2 = vx * vx + vy * vy
+  let t = c2 > 1e-10 ? (wx * vx + wy * vy) / c2 : 0
+  t = Math.max(0, Math.min(1, t))
+  const qx = a.x + t * vx
+  const qy = a.y + t * vy
+  const dx = p.x - qx
+  const dy = p.y - qy
+  return { distSq: dx * dx + dy * dy, t }
+}
+
+function onPolygonDblClick(e: L.LeafletMouseEvent, region: BorderRegion) {
+  if (!editMode.value || selectedId.value !== region.id || sketch.value) return
+  L.DomEvent.stopPropagation(e)
+  const ll = e.latlng
+  const open = ringOpenLngLat(region.ring)
+  if (open.length < 3) return
+  const p = map.latLngToLayerPoint(ll)
+  const n = open.length
+  const maxDistSq = 22 * 22
+  let bestD = Infinity
+  let bestI = 0
+  let bestT = 0
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    const a = L.latLng(open[i][1], open[i][0])
+    const b = L.latLng(open[j][1], open[j][0])
+    const pa = map.latLngToLayerPoint(a)
+    const pb = map.latLngToLayerPoint(b)
+    const { distSq, t } = distPointSegPx(p, pa, pb)
+    if (distSq < bestD) {
+      bestD = distSq
+      bestI = i
+      bestT = t
+    }
+  }
+  if (bestD > maxDistSq) return
+  const j = (bestI + 1) % n
+  const lng = open[bestI][0] + bestT * (open[j][0] - open[bestI][0])
+  const lat = open[bestI][1] + bestT * (open[j][1] - open[bestI][1])
+  const insert: [number, number] = [lng, lat]
+  const next = [
+    ...open.slice(0, bestI + 1),
+    insert,
+    ...open.slice(bestI + 1),
+  ]
+  region.ring = closedRingFromOpen(next)
+  const layers = layersById.get(region.id)
+  layers?.polygon.setLatLngs(ringToLatLngTuples(region.ring))
+  refreshVertexHandles()
+  schedulePersistToDatabase()
+}
+
+function refreshVertexHandles() {
+  clearVertexHandles()
+  if (
+    !vertexHandlesGroup ||
+    !editMode.value ||
+    !selectedId.value ||
+    sketch.value
+  ) {
+    return
+  }
+  const region = regions.value.find((r) => r.id === selectedId.value)
+  if (!region || !region.visible) return
+  const layers = layersById.get(region.id)
+  if (!layers) return
+
+  const vg = vertexHandlesGroup
+  const open = ringOpenLngLat(region.ring)
+  open.forEach((pt, i) => {
+    const m = L.marker(L.latLng(pt[1], pt[0]), {
+      icon: vertexHandleIcon(),
+      draggable: true,
+      zIndexOffset: 2500,
+    })
+    m.on('drag', () => {
+      const ll = m.getLatLng()
+      const o = ringOpenLngLat(region.ring)
+      if (i >= o.length) return
+      o[i] = [ll.lng, ll.lat]
+      region.ring = closedRingFromOpen(o)
+      const lyr = layersById.get(region.id)
+      lyr?.polygon.setLatLngs(ringToLatLngTuples(region.ring))
+    })
+    m.on('dragend', () => {
+      schedulePersistToDatabase()
+    })
+    m.addTo(vg)
+  })
+}
+
+function vertexHandleIcon(): L.DivIcon {
+  return L.divIcon({
+    className: 'map-regions-vertex-handle',
+    html: '',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  })
 }
 
 function applyRegionPolygonStyle(region: BorderRegion) {
@@ -173,7 +301,18 @@ function applyRegionPolygonStyle(region: BorderRegion) {
 }
 
 function mountRegionLayers(region: BorderRegion) {
-  const poly = L.polygon(ringToLatLngTuples(region.ring), regionPathStyle(region))
+  const poly = L.polygon(ringToLatLngTuples(region.ring), {
+    ...regionPathStyle(region),
+    interactive: true,
+  })
+  poly.on('click', (e: L.LeafletMouseEvent) => {
+    if (!editMode.value) return
+    L.DomEvent.stopPropagation(e)
+    selectedId.value = region.id
+  })
+  poly.on('dblclick', (e: L.LeafletMouseEvent) => {
+    onPolygonDblClick(e, region)
+  })
   const marker = L.marker([region.label.lat, region.label.lng], {
     icon: labelDivIcon(region),
     draggable: true,
@@ -211,6 +350,7 @@ function setRegionVisible(region: BorderRegion, visible: boolean) {
 }
 
 function teardownRegions() {
+  clearVertexHandles()
   layersById.clear()
   regionsGroup?.clearLayers()
 }
@@ -254,8 +394,8 @@ function startAddRegion() {
   const name = window.prompt('Region name')?.trim() ?? ''
   if (!name) return
   clearSketch()
-  map.doubleClickZoom.disable()
   sketch.value = { name, vertices: [] }
+  updateMapDoubleClickZoom()
   sketchLine = L.polyline([], {
     color: sketchLineColor.value,
     weight: 2,
@@ -338,6 +478,7 @@ async function loadRegions() {
     teardownRegions()
     regions.value = parsed.regions
     for (const r of regions.value) mountRegionLayers(r)
+    refreshVertexHandles()
   } catch {
     loadFailed.value = true
   }
@@ -345,13 +486,30 @@ async function loadRegions() {
 
 watch(editMode, (on) => {
   if (!on) clearSketch()
+  updateMapDoubleClickZoom()
+  refreshVertexHandles()
 })
+
+watch(selectedId, () => {
+  updateMapDoubleClickZoom()
+  refreshVertexHandles()
+})
+
+watch(
+  () => sketch.value,
+  () => {
+    updateMapDoubleClickZoom()
+    refreshVertexHandles()
+  }
+)
 
 onMounted(() => {
   regionsGroup = L.layerGroup().addTo(map)
+  vertexHandlesGroup = L.layerGroup().addTo(map)
   map.on('click', onMapClick)
   map.on('dblclick', onMapDblClick)
   void loadRegions()
+  updateMapDoubleClickZoom()
 })
 
 onUnmounted(() => {
@@ -363,6 +521,8 @@ onUnmounted(() => {
   teardownRegions()
   regionsGroup?.remove()
   regionsGroup = null
+  vertexHandlesGroup?.remove()
+  vertexHandlesGroup = null
 })
 </script>
 
@@ -448,6 +608,14 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
+
+      <p
+        v-if="editMode && selectedRegion && !sketch"
+        class="map-regions-editor__shape-hint"
+      >
+        Drag yellow handles to move corners. Double-click an edge (near the line)
+        to add a vertex.
+      </p>
 
       <div v-if="selectedRegion" class="map-regions-editor__style">
         <p class="map-regions-editor__style-title">Region colors</p>
@@ -663,6 +831,17 @@ onUnmounted(() => {
   opacity: 0.9;
 }
 
+.map-regions-editor__shape-hint {
+  margin: 0 0 0.45rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(126, 184, 218, 0.1);
+  border: 1px solid rgba(126, 184, 218, 0.25);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: #c9dde8;
+}
+
 .map-regions-editor__hint {
   margin: 0.35rem 0 0;
   width: 100%;
@@ -792,6 +971,19 @@ onUnmounted(() => {
 }
 
 .leaflet-div-icon.map-regions-editor__label-wrap:active {
+  cursor: grabbing;
+}
+
+.leaflet-div-icon.map-regions-vertex-handle {
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #e8c547;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 1px rgba(26, 26, 30, 0.9);
+  cursor: grab;
+}
+
+.leaflet-div-icon.map-regions-vertex-handle:active {
   cursor: grabbing;
 }
 </style>
