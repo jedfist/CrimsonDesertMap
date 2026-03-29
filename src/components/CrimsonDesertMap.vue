@@ -41,6 +41,7 @@ onMounted(() => {
         maxZoom: 6,
         zoomControl: true,
         attributionControl: false,
+        preferCanvas: true,
       })
 
       L.imageOverlay(imageUrl, bounds).addTo(map)

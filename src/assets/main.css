@@ -31,3 +31,8 @@ body {
 .leaflet-container {
   font-family: inherit;
 }
+
+.leaflet-container img.leaflet-image-layer {
+  image-rendering: high-quality;
+  image-rendering: -webkit-optimize-contrast;
+}
