@@ -22,6 +22,9 @@ export const WORLD_NODES_GEOJSON_PATH = 'map/thgl-data/world-nodes.geojson'
 /** Treasure nodes (subset of world nodes, thglKey treasures/*; see extract-thgl-treasures). */
 export const TREASURES_GEOJSON_PATH = 'map/thgl-data/treasures.geojson'
 
+/** Map pin for TH.GL `treasures/treasure_box` (placed under `public/`). */
+export const TREASURE_BOX_MARKER_PNG_PATH = 'map/icons/treasure-box-marker.png'
+
 /** `mapName` values from GeoJSON features to show as official overlays. */
 export const OFFICIAL_MAP_NAMES = ['OpenWorld'] as const
 

@@ -4,6 +4,7 @@ import L from 'leaflet'
 import {
   mapTilesManifestUrl,
   publicAssetUrl,
+  TREASURE_BOX_MARKER_PNG_PATH,
   treasuresGeoJsonUrl,
 } from '../config/map'
 import { escapeHtml, matchesMarkerSearch } from '../lib/mapMarkersShared'
@@ -19,6 +20,9 @@ import {
   thglFilterLabel,
   thglSpriteInlineStyle,
 } from '../lib/thglMapFilters'
+
+/** Sprite in popup (slightly larger than map pin for readability). */
+const POPUP_SPRITE_BASE_PX = 40
 
 const props = defineProps<{
   map: object
@@ -42,8 +46,47 @@ type TreasureProps = {
   gameY?: number
 }
 
+const TREASURE_MARKER_PANE = 'crimsonTreasureMarkers'
+
+/** Native pixel size of `treasure-box-marker.png` (keep in sync with asset). */
+const TREASURE_BOX_PNG_SIZE: [number, number] = [22, 23]
+
+const TREASURE_BOX_THGL_KEY = 'treasures/treasure_box'
+
 let layerGroup: L.LayerGroup | null = null
+let treasureBoxLeafletIcon: L.Icon | null = null
+
+function isTreasureBox(
+  thglKey: string | undefined,
+  nodeId: string | undefined,
+): boolean {
+  return (
+    thglKey === TREASURE_BOX_THGL_KEY ||
+    (nodeId ?? '') === 'treasure_box'
+  )
+}
+
+function treasureBoxPngIcon(): L.Icon {
+  if (!treasureBoxLeafletIcon) {
+    const [iw, ih] = TREASURE_BOX_PNG_SIZE
+    treasureBoxLeafletIcon = L.icon({
+      iconUrl: publicAssetUrl(TREASURE_BOX_MARKER_PNG_PATH),
+      iconSize: [iw, ih],
+      iconAnchor: [Math.round(iw / 2), ih],
+      popupAnchor: [0, -ih],
+      className: 'map-treasures__png-wrap',
+    })
+  }
+  return treasureBoxLeafletIcon
+}
+
 let features: GeoJSON.Feature<GeoJSON.Point, TreasureProps>[] = []
+/** Matches list row → Leaflet marker for fly-to + popup. */
+const markerByRowKey = new Map<string, L.Marker>()
+
+function treasureRowKey(nodeId: string, lat: number, lng: number): string {
+  return `${nodeId}|${lat}|${lng}`
+}
 
 const pywelW = ref(8192)
 const pywelH = ref(8192)
@@ -93,7 +136,14 @@ function latLngForFeature(
   return L.latLng(py, px)
 }
 
-function treasureIcon(thglKey: string, aria: string): L.DivIcon {
+function treasureIcon(
+  thglKey: string,
+  nodeId: string,
+  aria: string,
+): L.Icon | L.DivIcon {
+  if (isTreasureBox(thglKey, nodeId)) {
+    return treasureBoxPngIcon()
+  }
   const payload = props.thglFilters
   const lookup = lookupOrEmpty()
   const key = lookup.has(thglKey) ? thglKey : DEFAULT_USER_THGL_FILTER_KEY
@@ -113,7 +163,21 @@ function treasureIcon(thglKey: string, aria: string): L.DivIcon {
   })
 }
 
-function featureVisible(
+function popupTreasureSpriteHtml(thglKey: string): string {
+  const payload = props.thglFilters
+  const lookup = lookupOrEmpty()
+  const key = lookup.has(thglKey) ? thglKey : DEFAULT_USER_THGL_FILTER_KEY
+  const sprite =
+    payload &&
+    thglSpriteInlineStyle(key, payload, lookup, POPUP_SPRITE_BASE_PX)
+  if (sprite) {
+    return `<span class="map-treasures__popup-sprite" style="${sprite.css}"></span>`
+  }
+  return `<span class="map-treasures__popup-fallback" aria-hidden="true"></span>`
+}
+
+/** TH.GL-style: every treasure pin stays on the map when the layer is on. */
+function treasureMatchesPanelSearch(
   f: GeoJSON.Feature<GeoJSON.Point, TreasureProps>,
 ): boolean {
   if (!props.showTreasures) return false
@@ -126,26 +190,38 @@ function featureVisible(
 function popupHtml(f: GeoJSON.Feature<GeoJSON.Point, TreasureProps>): string {
   const id = f.properties?.nodeId ?? ''
   const g = f.properties?.group ?? ''
-  const parts = (f.properties?.thglKey ?? '').split('/')
+  const rawKey = f.properties?.thglKey ?? ''
+  const parts = rawKey.split('/')
   const kindLine =
     parts.length >= 2
       ? thglFilterLabel(parts[0]!, parts[1]!)
-      : f.properties?.thglKey ?? id
-  return `<div class="map-treasures__popup"><div class="map-treasures__popup-kind">${escapeHtml(kindLine)}</div><strong>${escapeHtml(id)}</strong>${g ? `<div class="map-treasures__popup-meta">${escapeHtml(g)}</div>` : ''}</div>`
+      : rawKey || id
+  const spriteKey = rawKey || DEFAULT_USER_THGL_FILTER_KEY
+  let iconWrap: string
+  if (isTreasureBox(rawKey || undefined, id || undefined)) {
+    const src = escapeHtml(publicAssetUrl(TREASURE_BOX_MARKER_PNG_PATH))
+    const [pw, ph] = TREASURE_BOX_PNG_SIZE
+    iconWrap = `<div class="map-treasures__popup-icon-wrap" aria-hidden="true"><img class="map-treasures__popup-png" src="${src}" width="${pw * 2}" height="${ph * 2}" alt="" /></div>`
+  } else {
+    iconWrap = `<div class="map-treasures__popup-icon-wrap" aria-hidden="true">${popupTreasureSpriteHtml(spriteKey)}</div>`
+  }
+  return `<div class="map-treasures__popup"><div class="map-treasures__popup-kind">${escapeHtml(kindLine)}</div><strong>${escapeHtml(id)}</strong>${g ? `<div class="map-treasures__popup-meta">${escapeHtml(g)}</div>` : ''}${iconWrap}</div>`
 }
 
 function syncLayers() {
   layerGroup?.clearLayers()
+  markerByRowKey.clear()
   if (!layerGroup) return
 
   for (const f of features) {
     if (f.geometry?.type !== 'Point') continue
-    if (!featureVisible(f)) continue
+    if (!props.showTreasures) continue
     const ll = latLngForFeature(f)
     const thglKey = f.properties?.thglKey ?? DEFAULT_USER_THGL_FILTER_KEY
     const name = f.properties?.nodeId ?? 'treasure'
     const m = L.marker(ll, {
-      icon: treasureIcon(thglKey, name),
+      icon: treasureIcon(thglKey, name, name),
+      pane: TREASURE_MARKER_PANE,
       interactive: true,
       zIndexOffset: 800,
       bubblingMouseEvents: false,
@@ -155,6 +231,7 @@ function syncLayers() {
       maxWidth: 260,
     })
     m.addTo(layerGroup)
+    markerByRowKey.set(treasureRowKey(name, ll.lat, ll.lng), m)
   }
 }
 
@@ -197,6 +274,10 @@ async function loadGeoJson(): Promise<void> {
 }
 
 onMounted(() => {
+  if (!map.getPane(TREASURE_MARKER_PANE)) {
+    const pane = map.createPane(TREASURE_MARKER_PANE)
+    pane.style.zIndex = '650'
+  }
   layerGroup = L.layerGroup().addTo(map)
   void (async () => {
     await Promise.all([loadProjection(), loadGeoJson()])
@@ -209,10 +290,10 @@ onUnmounted(() => {
   layerGroup?.remove()
   layerGroup = null
   features = []
+  markerByRowKey.clear()
 })
 
 watch(() => props.showTreasures, () => syncLayers())
-watch(() => props.searchQuery, () => syncLayers())
 watch(() => props.thglFilters, () => syncLayers(), { deep: true })
 watch([pywelW, pywelH], () => syncLayers())
 
@@ -220,13 +301,36 @@ defineExpose({
   getTreasureCount(): number {
     return features.length
   },
-  flyToTreasure(lat: number, lng: number) {
+  flyToTreasure(lat: number, lng: number, nodeId?: string) {
     const ll = L.latLng(lat, lng)
-    const z = Math.min(
-      map.getMaxZoom() - 1,
-      Math.max(map.getMinZoom() + 2, map.getZoom() + 1),
-    )
-    map.flyTo(ll, z, { duration: 0.28 })
+    const id = nodeId ?? 'treasure'
+    const key = treasureRowKey(id, lat, lng)
+    let marker = markerByRowKey.get(key)
+    if (!marker) {
+      let best: L.Marker | undefined
+      let bestD = Infinity
+      markerByRowKey.forEach((m, k) => {
+        if (!k.startsWith(`${id}|`)) return
+        const d = ll.distanceTo(m.getLatLng())
+        if (d < bestD) {
+          bestD = d
+          best = m
+        }
+      })
+      marker = best
+    }
+
+    const maxZ = map.getMaxZoom()
+    const minZ = map.getMinZoom()
+    // Native zoom (0) or best available so DivIcons are clearly visible on the art.
+    const targetZ = Math.min(maxZ, Math.max(minZ, Math.min(1, maxZ)))
+
+    const reveal = () => {
+      marker?.openPopup()
+    }
+    map.once('moveend', reveal)
+    map.flyTo(ll, targetZ, { duration: 0.4 })
+    window.setTimeout(reveal, 450)
   },
   getTreasureRows(): {
     nodeId: string
@@ -243,7 +347,7 @@ defineExpose({
     }[] = []
     for (const f of features) {
       if (f.geometry?.type !== 'Point') continue
-      if (!featureVisible(f)) continue
+      if (!treasureMatchesPanelSearch(f)) continue
       const ll = latLngForFeature(f)
       rows.push({
         nodeId: f.properties?.nodeId ?? '',
@@ -284,6 +388,10 @@ defineExpose({
   display: block;
   image-rendering: crisp-edges;
   flex-shrink: 0;
+  /* Visible if icon sheet is missing (404); sprite paints on top when loaded */
+  background-color: #9a7828;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
 .map-treasures__fallback {
@@ -327,5 +435,49 @@ defineExpose({
   font-size: 0.78rem;
   opacity: 0.85;
   margin-top: 0.2rem;
+}
+
+.map-treasures__popup-icon-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(26, 26, 30, 0.12);
+}
+
+.map-treasures__popup-sprite {
+  display: block;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
+  background-color: #9a7828;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.map-treasures__popup-fallback {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f0d080, #a07020);
+  box-shadow:
+    0 0 0 2px #1a1a1e,
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.leaflet-marker-icon.map-treasures__png-wrap {
+  border: none;
+  background: transparent;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+}
+
+.map-treasures__popup-png {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 </style>

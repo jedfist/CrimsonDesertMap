@@ -19,7 +19,7 @@ export type UserMarkersExposed = {
 }
 
 export type TreasuresOverlayExposed = {
-  flyToTreasure: (lat: number, lng: number) => void
+  flyToTreasure: (lat: number, lng: number, nodeId?: string) => void
   getTreasureRows: () => {
     nodeId: string
     lat: number
@@ -63,6 +63,8 @@ function userKindSearchLine(kind: string): string {
 
 const treasureRows = computed(() => {
   void props.treasuresDataTick
+  void props.searchQuery
+  void props.showTreasures
   return props.treasuresOverlayRef?.getTreasureRows() ?? []
 })
 
@@ -143,8 +145,8 @@ function flyToUser(lat: number, lng: number) {
   props.userMarkersRef?.flyToUser(lat, lng)
 }
 
-function flyToTreasure(lat: number, lng: number) {
-  props.treasuresOverlayRef?.flyToTreasure(lat, lng)
+function flyToTreasure(lat: number, lng: number, nodeId?: string) {
+  props.treasuresOverlayRef?.flyToTreasure(lat, lng, nodeId)
 }
 
 function triggerImport() {
@@ -437,7 +439,7 @@ function listMiniVueStyle(kind: string): Record<string, string> {
             <button
               type="button"
               class="map-markers-panel__link map-markers-panel__link--user"
-              @click="flyToTreasure(row.lat, row.lng)"
+              @click="flyToTreasure(row.lat, row.lng, row.nodeId)"
             >
               <span
                 class="map-markers-panel__mini-icon"
