@@ -24,6 +24,41 @@ let resizeObserver: ResizeObserver | null = null
 let resizeFitRaf = 0
 let compassVueApp: App<Element> | null = null
 
+/**
+ * Fill the map pane with tiles (no letterboxing); edges of the image may be clipped.
+ * Sets map min zoom to `chosen` so the user cannot zoom out past this level.
+ * `zoomMin`/`zoomMax` must be the manifest zoom range so resize refits stay correct.
+ */
+function fitMapCoverViewport(
+  mapInstance: L.Map,
+  imageBounds: L.LatLngBounds,
+  zoomMin: number,
+  zoomMax: number,
+  padding: [number, number] = [4, 4],
+): number | null {
+  const center = imageBounds.getCenter()
+  const pad = L.point(padding[0], padding[1])
+  const need = mapInstance.getSize().subtract(pad.multiplyBy(2))
+  if (need.x < 8 || need.y < 8) return null
+
+  mapInstance.setMinZoom(zoomMin)
+  let chosen = zoomMax
+  for (let z = zoomMin; z <= zoomMax; z++) {
+    mapInstance.setView(center, z, { animate: false })
+    const sw = mapInstance.latLngToContainerPoint(imageBounds.getSouthWest())
+    const ne = mapInstance.latLngToContainerPoint(imageBounds.getNorthEast())
+    const coverW = Math.abs(ne.x - sw.x)
+    const coverH = Math.abs(ne.y - sw.y)
+    if (coverW >= need.x && coverH >= need.y) {
+      chosen = z
+      break
+    }
+  }
+  mapInstance.setMinZoom(chosen)
+  mapInstance.setView(center, chosen, { animate: false })
+  return chosen
+}
+
 const CompassLeafletControl = L.Control.extend({
   options: {
     position: 'topleft',
@@ -59,16 +94,18 @@ onMounted(() => {
 
       const { width: w, height: h, tileSize, minNativeZoom, maxNativeZoom } =
         manifest
+      const zoomMax = maxNativeZoom + 4
 
       const bounds: L.LatLngBoundsExpression = [
         [0, 0],
         [h, w],
       ]
+      const imageBounds = L.latLngBounds(bounds)
 
       map = L.map(el, {
         crs: L.CRS.Simple,
         minZoom: minNativeZoom,
-        maxZoom: maxNativeZoom + 4,
+        maxZoom: zoomMax,
         maxBounds: bounds,
         maxBoundsViscosity: 1.0,
         zoomControl: false,
@@ -79,11 +116,11 @@ onMounted(() => {
       L.control.zoom({ position: 'topleft' }).addTo(map)
       new CompassLeafletControl().addTo(map)
 
-      L.tileLayer(tileUrlTemplate, {
+      const baseTileLayer = L.tileLayer(tileUrlTemplate, {
         tileSize,
         noWrap: true,
         minZoom: minNativeZoom,
-        maxZoom: maxNativeZoom + 4,
+        maxZoom: zoomMax,
         maxNativeZoom,
       }).addTo(map)
 
@@ -109,6 +146,18 @@ onMounted(() => {
         }).addTo(map)
       }
 
+      const applyCoverFit = () => {
+        if (!map || cancelled) return
+        const zCover = fitMapCoverViewport(
+          map,
+          imageBounds,
+          minNativeZoom,
+          zoomMax,
+          [4, 4],
+        )
+        if (zCover != null) baseTileLayer.options.minZoom = zCover
+      }
+
       const fit = () => {
         if (!map || cancelled) return
         const pane = mapContainer.value
@@ -116,10 +165,10 @@ onMounted(() => {
         const { width, height } = pane.getBoundingClientRect()
         if (width < 32 || height < 32) return
         map.invalidateSize()
-        map.fitBounds(bounds, { animate: false, padding: [8, 8] })
+        applyCoverFit()
       }
 
-      map.fitBounds(bounds)
+      applyCoverFit()
 
       await nextTick()
       requestAnimationFrame(() => {
