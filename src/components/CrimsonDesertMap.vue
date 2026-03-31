@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { createApp, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import type { App } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import MapRegionsEditor from './MapRegionsEditor.vue'
+import MapCompassRose from './MapCompassRose.vue'
 import {
   mapTilesManifestUrl,
   publicAssetUrl,
@@ -20,6 +22,25 @@ let map: L.Map | null = null
 let cancelled = false
 let resizeObserver: ResizeObserver | null = null
 let resizeFitRaf = 0
+let compassVueApp: App<Element> | null = null
+
+const CompassLeafletControl = L.Control.extend({
+  options: {
+    position: 'topleft',
+  },
+  onAdd() {
+    const container = L.DomUtil.create('div', 'crimson-map-compass-control')
+    L.DomEvent.disableClickPropagation(container)
+    L.DomEvent.disableScrollPropagation(container)
+    compassVueApp = createApp(MapCompassRose)
+    compassVueApp.mount(container)
+    return container
+  },
+  onRemove() {
+    compassVueApp?.unmount()
+    compassVueApp = null
+  },
+})
 
 async function loadManifest(): Promise<MapTilesManifest> {
   const r = await fetch(manifestUrl)
@@ -50,10 +71,13 @@ onMounted(() => {
         maxZoom: maxNativeZoom + 4,
         maxBounds: bounds,
         maxBoundsViscosity: 1.0,
-        zoomControl: true,
+        zoomControl: false,
         attributionControl: false,
         preferCanvas: false,
       })
+
+      L.control.zoom({ position: 'topleft' }).addTo(map)
+      new CompassLeafletControl().addTo(map)
 
       L.tileLayer(tileUrlTemplate, {
         tileSize,
@@ -190,5 +214,17 @@ onUnmounted(() => {
 .crimson-map__error code {
   font-size: 0.85em;
   word-break: break-all;
+}
+</style>
+
+<style>
+/* Leaflet injects the compass outside SFC scoped boundaries */
+.leaflet-container .crimson-map-compass-control {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  /* Southeast of zoom: below it in the stack, shifted east past the zoom bar */
+  margin-top: 10px !important;
+  margin-left: 52px !important;
 }
 </style>
