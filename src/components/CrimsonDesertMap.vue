@@ -5,14 +5,8 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import MapRegionsEditor from './MapRegionsEditor.vue'
 import MapCompassRose from './MapCompassRose.vue'
-import MapPlacesOverlay from './MapPlacesOverlay.vue'
-import MapWorldNodesOverlay from './MapWorldNodesOverlay.vue'
 import MapUserMarkers from './MapUserMarkers.vue'
-import MapMarkersPanel, {
-  type PlacesOverlayExposed,
-  type UserMarkersExposed,
-  type WorldNodesExposed,
-} from './MapMarkersPanel.vue'
+import MapMarkersPanel, { type UserMarkersExposed } from './MapMarkersPanel.vue'
 import {
   mapTilesManifestUrl,
   publicAssetUrl,
@@ -32,15 +26,10 @@ const loadError = ref(false)
 const manifestUrl = mapTilesManifestUrl()
 const tileUrlTemplate = publicAssetUrl('map/tiles/{z}/{x}/{y}.webp')
 
-const placesOverlayRef = ref<PlacesOverlayExposed | null>(null)
-const worldNodesRef = ref<WorldNodesExposed | null>(null)
 const userMarkersRef = ref<UserMarkersExposed | null>(null)
 
 const markerUi = reactive({
   searchQuery: '',
-  showPlaces: true,
-  showRegions: false,
-  showWorldNodes: true,
   showUser: true,
   placeMode: false,
   placeMarkerKind: DEFAULT_USER_THGL_FILTER_KEY,
@@ -48,8 +37,6 @@ const markerUi = reactive({
 })
 
 const userMarkers = ref<UserMarkerRecord[]>(loadUserMarkers())
-const placesDataTick = ref(0)
-const worldDataTick = ref(0)
 const thglFilters = ref<ThglMapFiltersPayload | null>(null)
 
 async function loadThglFiltersPayload() {
@@ -244,23 +231,6 @@ onUnmounted(() => {
       aria-hidden="true"
     />
     <template v-if="leafletMap">
-      <MapPlacesOverlay
-        ref="placesOverlayRef"
-        :map="leafletMap"
-        :show-places="markerUi.showPlaces"
-        :show-regions="markerUi.showRegions"
-        :search-query="markerUi.searchQuery"
-        :thgl-filters="thglFilters"
-        @loaded="placesDataTick += 1"
-      />
-      <MapWorldNodesOverlay
-        ref="worldNodesRef"
-        :map="leafletMap"
-        :show-world-nodes="markerUi.showWorldNodes"
-        :search-query="markerUi.searchQuery"
-        :thgl-filters="thglFilters"
-        @loaded="worldDataTick += 1"
-      />
       <MapRegionsEditor :map="leafletMap" />
       <MapUserMarkers
         ref="userMarkersRef"
@@ -277,15 +247,8 @@ onUnmounted(() => {
         @update:selected-user-id="markerUi.selectedUserId = $event"
       />
       <MapMarkersPanel
-        :places-overlay-ref="placesOverlayRef"
         :user-markers-ref="userMarkersRef"
-        :world-nodes-ref="worldNodesRef"
-        :places-data-tick="placesDataTick"
-        :world-data-tick="worldDataTick"
         :search-query="markerUi.searchQuery"
-        :show-places="markerUi.showPlaces"
-        :show-regions="markerUi.showRegions"
-        :show-world-nodes="markerUi.showWorldNodes"
         :show-user="markerUi.showUser"
         :place-mode="markerUi.placeMode"
         :place-marker-kind="markerUi.placeMarkerKind"
@@ -293,9 +256,6 @@ onUnmounted(() => {
         :user-markers="userMarkers"
         :selected-user-id="markerUi.selectedUserId"
         @update:search-query="markerUi.searchQuery = $event"
-        @update:show-places="markerUi.showPlaces = $event"
-        @update:show-regions="markerUi.showRegions = $event"
-        @update:show-world-nodes="markerUi.showWorldNodes = $event"
         @update:show-user="markerUi.showUser = $event"
         @update:place-mode="markerUi.placeMode = $event"
         @update:place-marker-kind="markerUi.placeMarkerKind = $event"

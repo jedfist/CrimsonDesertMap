@@ -14,39 +14,13 @@ import {
   type ThglMapFiltersPayload,
 } from '../lib/thglMapFilters'
 
-export type PlacesOverlayExposed = {
-  getPlaceRows: () => { name: string; lat: number; lng: number }[]
-  getRegionRows: () => { name: string; lat: number; lng: number }[]
-  flyToFeature: (lat: number, lng: number) => void
-}
-
 export type UserMarkersExposed = {
   flyToUser: (lat: number, lng: number) => void
 }
 
-export type WorldNodesExposed = {
-  flyToNode: (lat: number, lng: number) => void
-  getWorldRows: () => {
-    nodeId: string
-    lat: number
-    lng: number
-    thglKey: string
-  }[]
-  getWorldNodeCount: () => number
-}
-
 const props = defineProps<{
-  placesOverlayRef: PlacesOverlayExposed | null
   userMarkersRef: UserMarkersExposed | null
-  worldNodesRef: WorldNodesExposed | null
-  /** Bumps when world-nodes.geojson finishes loading. */
-  worldDataTick: number
-  /** Bumps when official GeoJSON finishes loading so list computeds re-run. */
-  placesDataTick: number
   searchQuery: string
-  showPlaces: boolean
-  showRegions: boolean
-  showWorldNodes: boolean
   showUser: boolean
   placeMode: boolean
   placeMarkerKind: string
@@ -57,9 +31,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:searchQuery': [v: string]
-  'update:showPlaces': [v: boolean]
-  'update:showRegions': [v: boolean]
-  'update:showWorldNodes': [v: boolean]
   'update:showUser': [v: boolean]
   'update:placeMode': [v: boolean]
   'update:placeMarkerKind': [v: string]
@@ -69,25 +40,6 @@ const emit = defineEmits<{
 
 const importError = ref('')
 const fileInputRef = ref<HTMLInputElement | null>(null)
-
-const placeRows = computed(() => {
-  void props.placesDataTick
-  return props.placesOverlayRef?.getPlaceRows() ?? []
-})
-const regionRows = computed(() => {
-  void props.placesDataTick
-  return props.placesOverlayRef?.getRegionRows() ?? []
-})
-
-const worldRows = computed(() => {
-  void props.worldDataTick
-  return props.worldNodesRef?.getWorldRows() ?? []
-})
-
-const worldNodeTotal = computed(() => {
-  void props.worldDataTick
-  return props.worldNodesRef?.getWorldNodeCount() ?? 0
-})
 
 function userKindSearchLine(kind: string): string {
   const p = kind.split('/')
@@ -162,18 +114,6 @@ function deleteSelected() {
   emit('update:selectedUserId', null)
 }
 
-function flyToPlace(lat: number, lng: number) {
-  props.placesOverlayRef?.flyToFeature(lat, lng)
-}
-
-function flyToRegion(lat: number, lng: number) {
-  props.placesOverlayRef?.flyToFeature(lat, lng)
-}
-
-function flyToWorldNode(lat: number, lng: number) {
-  props.worldNodesRef?.flyToNode(lat, lng)
-}
-
 function flyToUser(lat: number, lng: number) {
   props.userMarkersRef?.flyToUser(lat, lng)
 }
@@ -233,7 +173,7 @@ function listMiniVueStyle(kind: string): Record<string, string> {
 <template>
   <aside
     class="map-markers-panel"
-    aria-label="Map markers and search"
+    aria-label="My map markers"
   >
     <h2 class="map-markers-panel__title">Markers</h2>
 
@@ -252,42 +192,6 @@ function listMiniVueStyle(kind: string): Record<string, string> {
 
     <fieldset class="map-markers-panel__filters">
       <legend class="map-markers-panel__legend">Show on map</legend>
-      <label class="map-markers-panel__check">
-        <input
-          type="checkbox"
-          :checked="showPlaces"
-          @change="
-            emit('update:showPlaces', ($event.target as HTMLInputElement).checked)
-          "
-        />
-        Official places
-      </label>
-      <label class="map-markers-panel__check">
-        <input
-          type="checkbox"
-          :checked="showRegions"
-          @change="
-            emit(
-              'update:showRegions',
-              ($event.target as HTMLInputElement).checked,
-            )
-          "
-        />
-        Region centers
-      </label>
-      <label class="map-markers-panel__check">
-        <input
-          type="checkbox"
-          :checked="showWorldNodes"
-          @change="
-            emit(
-              'update:showWorldNodes',
-              ($event.target as HTMLInputElement).checked,
-            )
-          "
-        />
-        World nodes (TH.GL)
-      </label>
       <label class="map-markers-panel__check">
         <input
           type="checkbox"
@@ -446,85 +350,6 @@ function listMiniVueStyle(kind: string): Record<string, string> {
     </div>
 
     <div class="map-markers-panel__lists">
-      <section
-        v-if="showPlaces && placeRows.length"
-        class="map-markers-panel__section"
-      >
-        <h3 class="map-markers-panel__subtitle">Places</h3>
-        <ul class="map-markers-panel__list">
-          <li
-            v-for="row in placeRows"
-            :key="'p-' + row.name + row.lat + row.lng"
-          >
-            <button
-              type="button"
-              class="map-markers-panel__link"
-              @click="flyToPlace(row.lat, row.lng)"
-            >
-              {{ row.name || '—' }}
-            </button>
-          </li>
-        </ul>
-      </section>
-
-      <section
-        v-if="showWorldNodes && worldRows.length"
-        class="map-markers-panel__section"
-      >
-        <h3 class="map-markers-panel__subtitle">
-          World nodes ({{ worldNodeTotal }})
-        </h3>
-        <p class="map-markers-panel__list-note">
-          Same sprite types as crimsondesert.th.gl. Up to 300 rows; use search
-          to narrow.
-        </p>
-        <ul class="map-markers-panel__list">
-          <li
-            v-for="(row, wi) in worldRows"
-            :key="'w-' + row.nodeId + row.lat + row.lng + wi"
-          >
-            <button
-              type="button"
-              class="map-markers-panel__link map-markers-panel__link--user"
-              @click="flyToWorldNode(row.lat, row.lng)"
-            >
-              <span
-                class="map-markers-panel__mini-icon"
-                aria-hidden="true"
-                :style="listMiniVueStyle(row.thglKey)"
-              />
-              <span class="map-markers-panel__link-text">
-                <span class="map-markers-panel__link-kind">{{
-                  userKindSearchLine(row.thglKey)
-                }}</span>
-                {{ row.nodeId }}
-              </span>
-            </button>
-          </li>
-        </ul>
-      </section>
-
-      <section
-        v-if="showRegions && regionRows.length"
-        class="map-markers-panel__section"
-      >
-        <h3 class="map-markers-panel__subtitle">Regions</h3>
-        <ul class="map-markers-panel__list">
-          <li
-            v-for="row in regionRows"
-            :key="'r-' + row.name + row.lat + row.lng"
-          >
-            <button
-              type="button"
-              class="map-markers-panel__link"
-              @click="flyToRegion(row.lat, row.lng)"
-            >
-              {{ row.name || '—' }}
-            </button>
-          </li>
-        </ul>
-      </section>
-
       <section
         v-if="showUser && filteredUserMarkers.length"
         class="map-markers-panel__section"
@@ -738,13 +563,6 @@ function listMiniVueStyle(kind: string): Record<string, string> {
 
 .map-markers-panel__section {
   margin-bottom: 0.65rem;
-}
-
-.map-markers-panel__list-note {
-  margin: 0 0 0.35rem;
-  font-size: 0.68rem;
-  line-height: 1.3;
-  color: #7a7670;
 }
 
 .map-markers-panel__list {
