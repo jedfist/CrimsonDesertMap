@@ -8,3 +8,5 @@ Ingested from TH.GL CDN (data only).
 - coords-meta.json — bounds used for projection.
 - map-filters.json — TH.GL filter groups + icon sprite sheet (same taxonomy as crimsondesert.th.gl).
 - icons/*.webp — mirrored sprite from CDN.
+- world-nodes.geojson — npm run extract-thgl-world-nodes (from nodes/*.raw).
+- treasures.geojson — npm run extract-thgl-treasures (treasures/* subset of world-nodes).

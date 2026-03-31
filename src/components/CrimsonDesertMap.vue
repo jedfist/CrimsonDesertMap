@@ -6,7 +6,11 @@ import 'leaflet/dist/leaflet.css'
 import MapRegionsEditor from './MapRegionsEditor.vue'
 import MapCompassRose from './MapCompassRose.vue'
 import MapUserMarkers from './MapUserMarkers.vue'
-import MapMarkersPanel, { type UserMarkersExposed } from './MapMarkersPanel.vue'
+import MapTreasuresOverlay from './MapTreasuresOverlay.vue'
+import MapMarkersPanel, {
+  type TreasuresOverlayExposed,
+  type UserMarkersExposed,
+} from './MapMarkersPanel.vue'
 import {
   mapTilesManifestUrl,
   publicAssetUrl,
@@ -27,16 +31,19 @@ const manifestUrl = mapTilesManifestUrl()
 const tileUrlTemplate = publicAssetUrl('map/tiles/{z}/{x}/{y}.webp')
 
 const userMarkersRef = ref<UserMarkersExposed | null>(null)
+const treasuresOverlayRef = ref<TreasuresOverlayExposed | null>(null)
 
 const markerUi = reactive({
   searchQuery: '',
   showUser: true,
+  showTreasures: true,
   placeMode: false,
   placeMarkerKind: DEFAULT_USER_THGL_FILTER_KEY,
   selectedUserId: null as string | null,
 })
 
 const userMarkers = ref<UserMarkerRecord[]>(loadUserMarkers())
+const treasuresDataTick = ref(0)
 const thglFilters = ref<ThglMapFiltersPayload | null>(null)
 
 async function loadThglFiltersPayload() {
@@ -51,7 +58,7 @@ void loadThglFiltersPayload()
 
 function persistUserMarkers(next: UserMarkerRecord[]) {
   userMarkers.value = next
-  saveUserMarkers(next)
+  queueMicrotask(() => saveUserMarkers(next))
 }
 
 let map: L.Map | null = null
@@ -232,6 +239,14 @@ onUnmounted(() => {
     />
     <template v-if="leafletMap">
       <MapRegionsEditor :map="leafletMap" />
+      <MapTreasuresOverlay
+        ref="treasuresOverlayRef"
+        :map="leafletMap"
+        :show-treasures="markerUi.showTreasures"
+        :search-query="markerUi.searchQuery"
+        :thgl-filters="thglFilters"
+        @loaded="treasuresDataTick += 1"
+      />
       <MapUserMarkers
         ref="userMarkersRef"
         :map="leafletMap"
@@ -248,8 +263,11 @@ onUnmounted(() => {
       />
       <MapMarkersPanel
         :user-markers-ref="userMarkersRef"
+        :treasures-overlay-ref="treasuresOverlayRef"
+        :treasures-data-tick="treasuresDataTick"
         :search-query="markerUi.searchQuery"
         :show-user="markerUi.showUser"
+        :show-treasures="markerUi.showTreasures"
         :place-mode="markerUi.placeMode"
         :place-marker-kind="markerUi.placeMarkerKind"
         :thgl-filters="thglFilters"
@@ -257,6 +275,7 @@ onUnmounted(() => {
         :selected-user-id="markerUi.selectedUserId"
         @update:search-query="markerUi.searchQuery = $event"
         @update:show-user="markerUi.showUser = $event"
+        @update:show-treasures="markerUi.showTreasures = $event"
         @update:place-mode="markerUi.placeMode = $event"
         @update:place-marker-kind="markerUi.placeMarkerKind = $event"
         @update:user-markers="persistUserMarkers"

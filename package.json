@@ -13,7 +13,8 @@
     "stitch-thgl-openworld": "node scripts/stitch-thgl-openworld.mjs",
     "ingest-thgl-map-tiles": "node scripts/ingest-thgl-tiles.mjs",
     "ingest-thgl-map-data": "node scripts/ingest-thgl-map-data.mjs",
-    "extract-thgl-world-nodes": "node scripts/extract-thgl-nodes-from-raw.mjs"
+    "extract-thgl-world-nodes": "node scripts/extract-thgl-nodes-from-raw.mjs",
+    "extract-thgl-treasures": "node scripts/extract-thgl-treasures.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

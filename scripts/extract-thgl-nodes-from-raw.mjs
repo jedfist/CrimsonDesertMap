@@ -104,6 +104,8 @@ async function main() {
 
   for (const f of filtered) {
     const [gx, gy] = f.geometry.coordinates
+    f.properties.gameX = gx
+    f.properties.gameY = gy
     const lng = ((gx - xMin) / xSpan) * pyW
     const lat = ((gy - yMin) / ySpan) * pyH
     f.geometry.coordinates = [lng, lat]

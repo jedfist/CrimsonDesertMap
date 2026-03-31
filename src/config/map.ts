@@ -19,6 +19,9 @@ export const LANDMARKS_GEOJSON_PATH = 'map/thgl-data/landmarks.geojson'
 /** TH.GL world nodes extracted from nodes/*.raw (see extract-thgl-world-nodes). */
 export const WORLD_NODES_GEOJSON_PATH = 'map/thgl-data/world-nodes.geojson'
 
+/** Treasure nodes (subset of world nodes, thglKey treasures/*; see extract-thgl-treasures). */
+export const TREASURES_GEOJSON_PATH = 'map/thgl-data/treasures.geojson'
+
 /** `mapName` values from GeoJSON features to show as official overlays. */
 export const OFFICIAL_MAP_NAMES = ['OpenWorld'] as const
 
@@ -57,6 +60,10 @@ export function landmarksGeoJsonUrl(): string {
 
 export function worldNodesGeoJsonUrl(): string {
   return publicAssetUrl(WORLD_NODES_GEOJSON_PATH)
+}
+
+export function treasuresGeoJsonUrl(): string {
+  return publicAssetUrl(TREASURES_GEOJSON_PATH)
 }
 
 export interface MapTilesManifest {

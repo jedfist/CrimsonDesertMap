@@ -32,6 +32,19 @@ const map = props.map as L.Map
 
 let group: L.LayerGroup | null = null
 const leafletById = new Map<string, L.Marker>()
+/** Last props applied to each Leaflet marker (skip redundant DOM work). */
+const lastApplied = new Map<
+  string,
+  {
+    lat: number
+    lng: number
+    kind: string
+    selected: boolean
+    title: string
+    notes: string
+  }
+>()
+
 const PLACE_MODE_CLASS = 'crimson-map--place-mode'
 
 function lookupOrEmpty() {
@@ -95,8 +108,123 @@ function setMarkers(next: UserMarkerRecord[]) {
   emit('update:markers', next)
 }
 
+function removeLeafletMarker(id: string) {
+  const ly = leafletById.get(id)
+  if (ly && group) {
+    group.removeLayer(ly)
+    ly.remove()
+  }
+  leafletById.delete(id)
+  lastApplied.delete(id)
+}
+
+function attachMarkerHandlers(marker: L.Marker, id: string) {
+  marker.on('click', (ev: L.LeafletMouseEvent) => {
+    L.DomEvent.stopPropagation(ev.originalEvent)
+    emit('update:selectedUserId', id)
+    marker.openPopup()
+  })
+  marker.on('dragend', () => {
+    const ll = marker.getLatLng()
+    const next = props.markers.map((x) =>
+      x.id === id
+        ? {
+            ...x,
+            lat: ll.lat,
+            lng: ll.lng,
+            updatedAt: new Date().toISOString(),
+          }
+        : x,
+    )
+    setMarkers(next)
+  })
+}
+
+function createLeafletMarker(
+  m: UserMarkerRecord,
+  selectedOverride?: boolean,
+): L.Marker {
+  const selected =
+    selectedOverride !== undefined
+      ? selectedOverride
+      : m.id === props.selectedUserId
+  const marker = L.marker(L.latLng(m.lat, m.lng), {
+    icon: userSpriteDivIcon(m.kind, selected),
+    draggable: true,
+    zIndexOffset: selected ? 2500 : 2000,
+  })
+  marker.bindPopup(popupHtml(m), {
+    className: 'map-user-marker__popup-wrap',
+    maxWidth: 280,
+  })
+  attachMarkerHandlers(marker, m.id)
+  lastApplied.set(m.id, {
+    lat: m.lat,
+    lng: m.lng,
+    kind: m.kind,
+    selected,
+    title: m.title,
+    notes: m.notes,
+  })
+  return marker
+}
+
+function updateLeafletMarker(marker: L.Marker, m: UserMarkerRecord) {
+  const selected = m.id === props.selectedUserId
+  const prev = lastApplied.get(m.id)
+  const nextState = {
+    lat: m.lat,
+    lng: m.lng,
+    kind: m.kind,
+    selected,
+    title: m.title,
+    notes: m.notes,
+  }
+
+  if (!prev || prev.lat !== m.lat || prev.lng !== m.lng) {
+    marker.setLatLng(L.latLng(m.lat, m.lng))
+  }
+  if (!prev || prev.kind !== m.kind || prev.selected !== selected) {
+    marker.setIcon(userSpriteDivIcon(m.kind, selected))
+  }
+  if (
+    !prev ||
+    prev.title !== m.title ||
+    prev.notes !== m.notes ||
+    prev.kind !== m.kind
+  ) {
+    marker.setPopupContent(popupHtml(m))
+  }
+  marker.setZIndexOffset(selected ? 2500 : 2000)
+  lastApplied.set(m.id, nextState)
+}
+
+function reconcileMarkers() {
+  if (!group) return
+
+  const wanted = props.markers.filter(visible)
+  const wantedIds = new Set(wanted.map((m) => m.id))
+
+  for (const id of leafletById.keys()) {
+    if (!wantedIds.has(id)) removeLeafletMarker(id)
+  }
+
+  for (const m of wanted) {
+    const existing = leafletById.get(m.id)
+    if (!existing) {
+      const marker = createLeafletMarker(m)
+      marker.addTo(group)
+      leafletById.set(m.id, marker)
+    } else {
+      updateLeafletMarker(existing, m)
+    }
+  }
+}
+
 function onMapClickPlace(e: L.LeafletMouseEvent) {
   if (!props.placeMode) return
+  if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent)
+
   const id = crypto.randomUUID()
   const rec: UserMarkerRecord = {
     id,
@@ -107,54 +235,22 @@ function onMapClickPlace(e: L.LeafletMouseEvent) {
     notes: '',
     updatedAt: new Date().toISOString(),
   }
+
+  map.getContainer().classList.remove(PLACE_MODE_CLASS)
+
   setMarkers([...props.markers, rec])
   emit('update:selectedUserId', id)
   emit('update:placeMode', false)
-}
 
-function syncLayers() {
-  if (!group) return
-
-  for (const [, ly] of leafletById) {
-    group.removeLayer(ly)
-    ly.remove()
-  }
-  leafletById.clear()
-
-  for (const m of props.markers) {
-    if (!visible(m)) continue
-    const latlng = L.latLng(m.lat, m.lng)
-    const selected = m.id === props.selectedUserId
-    const marker = L.marker(latlng, {
-      icon: userSpriteDivIcon(m.kind, selected),
-      draggable: true,
-      zIndexOffset: selected ? 2500 : 2000,
-    })
-    marker.bindPopup(popupHtml(m), {
-      className: 'map-user-marker__popup-wrap',
-      maxWidth: 280,
-    })
-    marker.on('click', (ev: L.LeafletMouseEvent) => {
-      L.DomEvent.stopPropagation(ev.originalEvent)
-      emit('update:selectedUserId', m.id)
-      marker.openPopup()
-    })
-    marker.on('dragend', () => {
-      const ll = marker.getLatLng()
-      const next = props.markers.map((x) =>
-        x.id === m.id
-          ? {
-              ...x,
-              lat: ll.lat,
-              lng: ll.lng,
-              updatedAt: new Date().toISOString(),
-            }
-          : x,
-      )
-      setMarkers(next)
-    })
-    marker.addTo(group)
-    leafletById.set(m.id, marker)
+  if (group && visible(rec)) {
+    if (!leafletById.has(rec.id)) {
+      const marker = createLeafletMarker(rec, true)
+      marker.addTo(group)
+      leafletById.set(rec.id, marker)
+      requestAnimationFrame(() => {
+        marker.openPopup()
+      })
+    }
   }
 }
 
@@ -167,7 +263,7 @@ function syncPlaceModeClass() {
 onMounted(() => {
   group = L.layerGroup().addTo(map)
   map.on('click', onMapClickPlace)
-  syncLayers()
+  reconcileMarkers()
   syncPlaceModeClass()
 })
 
@@ -175,6 +271,7 @@ onUnmounted(() => {
   map.off('click', onMapClickPlace)
   map.getContainer().classList.remove(PLACE_MODE_CLASS)
   leafletById.clear()
+  lastApplied.clear()
   group?.remove()
   group = null
 })
@@ -186,10 +283,18 @@ watch(
       props.showUser,
       props.searchQuery,
       props.selectedUserId,
-      props.thglFilters,
     ] as const,
-  () => syncLayers(),
-  { deep: true },
+  () => reconcileMarkers(),
+  { flush: 'post' },
+)
+
+watch(
+  () => props.thglFilters,
+  () => {
+    lastApplied.clear()
+    reconcileMarkers()
+  },
+  { flush: 'post' },
 )
 
 watch(
@@ -204,7 +309,7 @@ defineExpose({
       map.getMaxZoom() - 1,
       Math.max(map.getMinZoom() + 2, map.getZoom() + 1),
     )
-    map.flyTo(ll, z, { duration: 0.45 })
+    map.flyTo(ll, z, { duration: 0.28 })
   },
 })
 </script>
@@ -215,6 +320,10 @@ defineExpose({
 
 <style>
 .leaflet-container.crimson-map--place-mode {
+  cursor: crosshair !important;
+}
+
+.leaflet-container.crimson-map--place-mode .leaflet-interactive {
   cursor: crosshair !important;
 }
 

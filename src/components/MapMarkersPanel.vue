@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import type { UserMarkerRecord } from '../lib/userMarkers'
 import {
   exportUserMarkersJson,
@@ -18,10 +18,24 @@ export type UserMarkersExposed = {
   flyToUser: (lat: number, lng: number) => void
 }
 
+export type TreasuresOverlayExposed = {
+  flyToTreasure: (lat: number, lng: number) => void
+  getTreasureRows: () => {
+    nodeId: string
+    lat: number
+    lng: number
+    thglKey: string
+  }[]
+  getTreasureCount: () => number
+}
+
 const props = defineProps<{
   userMarkersRef: UserMarkersExposed | null
+  treasuresOverlayRef: TreasuresOverlayExposed | null
+  treasuresDataTick: number
   searchQuery: string
   showUser: boolean
+  showTreasures: boolean
   placeMode: boolean
   placeMarkerKind: string
   thglFilters: ThglMapFiltersPayload | null
@@ -32,6 +46,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:searchQuery': [v: string]
   'update:showUser': [v: boolean]
+  'update:showTreasures': [v: boolean]
   'update:placeMode': [v: boolean]
   'update:placeMarkerKind': [v: string]
   'update:userMarkers': [v: UserMarkerRecord[]]
@@ -45,6 +60,16 @@ function userKindSearchLine(kind: string): string {
   const p = kind.split('/')
   return p.length >= 2 ? thglFilterLabel(p[0]!, p[1]!) : kind
 }
+
+const treasureRows = computed(() => {
+  void props.treasuresDataTick
+  return props.treasuresOverlayRef?.getTreasureRows() ?? []
+})
+
+const treasureTotal = computed(() => {
+  void props.treasuresDataTick
+  return props.treasuresOverlayRef?.getTreasureCount() ?? 0
+})
 
 const filteredUserMarkers = computed(() => {
   const q = props.searchQuery.trim().toLowerCase()
@@ -118,6 +143,10 @@ function flyToUser(lat: number, lng: number) {
   props.userMarkersRef?.flyToUser(lat, lng)
 }
 
+function flyToTreasure(lat: number, lng: number) {
+  props.treasuresOverlayRef?.flyToTreasure(lat, lng)
+}
+
 function triggerImport() {
   importError.value = ''
   fileInputRef.value?.click()
@@ -162,6 +191,25 @@ function togglePlaceMode() {
   if (next) emit('update:selectedUserId', null)
 }
 
+function onPlaceModeEscape(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !props.placeMode) return
+  e.preventDefault()
+  emit('update:placeMode', false)
+}
+
+watch(
+  () => props.placeMode,
+  (active) => {
+    if (active) window.addEventListener('keydown', onPlaceModeEscape, true)
+    else window.removeEventListener('keydown', onPlaceModeEscape, true)
+  },
+  { flush: 'post' },
+)
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onPlaceModeEscape, true)
+})
+
 function listMiniVueStyle(kind: string): Record<string, string> {
   const payload = props.thglFilters
   if (!payload) return {}
@@ -173,7 +221,7 @@ function listMiniVueStyle(kind: string): Record<string, string> {
 <template>
   <aside
     class="map-markers-panel"
-    aria-label="My map markers"
+    aria-label="Map markers and treasures"
   >
     <h2 class="map-markers-panel__title">Markers</h2>
 
@@ -182,7 +230,7 @@ function listMiniVueStyle(kind: string): Record<string, string> {
       <input
         class="map-markers-panel__input"
         type="search"
-        placeholder="Filter by name or notes…"
+        placeholder="Filter markers and treasures…"
         :value="searchQuery"
         @input="
           emit('update:searchQuery', ($event.target as HTMLInputElement).value)
@@ -201,6 +249,19 @@ function listMiniVueStyle(kind: string): Record<string, string> {
           "
         />
         My markers
+      </label>
+      <label class="map-markers-panel__check">
+        <input
+          type="checkbox"
+          :checked="showTreasures"
+          @change="
+            emit(
+              'update:showTreasures',
+              ($event.target as HTMLInputElement).checked,
+            )
+          "
+        />
+        Treasures (TH.GL)
       </label>
     </fieldset>
 
@@ -350,6 +411,50 @@ function listMiniVueStyle(kind: string): Record<string, string> {
     </div>
 
     <div class="map-markers-panel__lists">
+      <section
+        v-if="showTreasures && treasureRows.length"
+        class="map-markers-panel__section"
+      >
+        <h3 class="map-markers-panel__subtitle">
+          Treasures ({{ treasureTotal }})
+        </h3>
+        <p class="map-markers-panel__list-note">
+          Icons match
+          <a
+            class="map-markers-panel__ext"
+            href="https://crimsondesert.th.gl/maps/Continent%20of%20Pywel"
+            target="_blank"
+            rel="noopener noreferrer"
+            >TH.GL Crimson Desert</a
+          >
+          (sprite from ingested map-filters).
+        </p>
+        <ul class="map-markers-panel__list">
+          <li
+            v-for="(row, ti) in treasureRows"
+            :key="'t-' + row.nodeId + row.lat + row.lng + ti"
+          >
+            <button
+              type="button"
+              class="map-markers-panel__link map-markers-panel__link--user"
+              @click="flyToTreasure(row.lat, row.lng)"
+            >
+              <span
+                class="map-markers-panel__mini-icon"
+                aria-hidden="true"
+                :style="listMiniVueStyle(row.thglKey)"
+              />
+              <span class="map-markers-panel__link-text">
+                <span class="map-markers-panel__link-kind">{{
+                  userKindSearchLine(row.thglKey)
+                }}</span>
+                {{ row.nodeId }}
+              </span>
+            </button>
+          </li>
+        </ul>
+      </section>
+
       <section
         v-if="showUser && filteredUserMarkers.length"
         class="map-markers-panel__section"
@@ -563,6 +668,23 @@ function listMiniVueStyle(kind: string): Record<string, string> {
 
 .map-markers-panel__section {
   margin-bottom: 0.65rem;
+}
+
+.map-markers-panel__list-note {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: #7a7670;
+}
+
+.map-markers-panel__ext {
+  color: #c9a87a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.map-markers-panel__ext:hover {
+  color: #e8dcc4;
 }
 
 .map-markers-panel__list {
