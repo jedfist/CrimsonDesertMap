@@ -2,6 +2,9 @@ Ingested from TH.GL CDN (data only).
 - version.json — full site map config (filters, tiles, drawings, regions).
 - tiles.json — tile layer config.
 - nodes/*.raw — binary spawn/marker blob (format proprietary; for archival).
-- landmarks.geojson — Points from drawings + region centers, projected onto local Pywel pixel space.
+- landmarks.geojson — All points (drawings + region centers).
+- places.geojson — Drawing labels only.
+- region-centers.geojson — Region center points only.
 - coords-meta.json — bounds used for projection.
-- border-regions.json — user-drawn region polygons + labels; written by the dev server via LowDB (commit this file to keep data in the repo).
+- map-filters.json — TH.GL filter groups + icon sprite sheet (same taxonomy as crimsondesert.th.gl).
+- icons/*.webp — mirrored sprite from CDN.

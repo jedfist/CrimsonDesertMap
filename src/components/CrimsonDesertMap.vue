@@ -1,22 +1,71 @@
 <script setup lang="ts">
-import { createApp, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { createApp, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import type { App } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import MapRegionsEditor from './MapRegionsEditor.vue'
 import MapCompassRose from './MapCompassRose.vue'
+import MapPlacesOverlay from './MapPlacesOverlay.vue'
+import MapWorldNodesOverlay from './MapWorldNodesOverlay.vue'
+import MapUserMarkers from './MapUserMarkers.vue'
+import MapMarkersPanel, {
+  type PlacesOverlayExposed,
+  type UserMarkersExposed,
+  type WorldNodesExposed,
+} from './MapMarkersPanel.vue'
 import {
   mapTilesManifestUrl,
   publicAssetUrl,
   type MapTilesManifest,
 } from '../config/map'
+import { loadUserMarkers, saveUserMarkers } from '../lib/userMarkers'
+import type { UserMarkerRecord } from '../lib/userMarkers'
+import {
+  DEFAULT_USER_THGL_FILTER_KEY,
+  thglMapFiltersUrl,
+  type ThglMapFiltersPayload,
+} from '../lib/thglMapFilters'
 
 const mapContainer = ref<HTMLElement | null>(null)
 const leafletMap = ref<L.Map | null>(null)
 const loadError = ref(false)
 const manifestUrl = mapTilesManifestUrl()
 const tileUrlTemplate = publicAssetUrl('map/tiles/{z}/{x}/{y}.webp')
-const landmarksUrl = publicAssetUrl('map/thgl-data/landmarks.geojson')
+
+const placesOverlayRef = ref<PlacesOverlayExposed | null>(null)
+const worldNodesRef = ref<WorldNodesExposed | null>(null)
+const userMarkersRef = ref<UserMarkersExposed | null>(null)
+
+const markerUi = reactive({
+  searchQuery: '',
+  showPlaces: true,
+  showRegions: false,
+  showWorldNodes: true,
+  showUser: true,
+  placeMode: false,
+  placeMarkerKind: DEFAULT_USER_THGL_FILTER_KEY,
+  selectedUserId: null as string | null,
+})
+
+const userMarkers = ref<UserMarkerRecord[]>(loadUserMarkers())
+const placesDataTick = ref(0)
+const worldDataTick = ref(0)
+const thglFilters = ref<ThglMapFiltersPayload | null>(null)
+
+async function loadThglFiltersPayload() {
+  try {
+    const r = await fetch(thglMapFiltersUrl())
+    if (r.ok) thglFilters.value = (await r.json()) as ThglMapFiltersPayload
+  } catch {
+    thglFilters.value = null
+  }
+}
+void loadThglFiltersPayload()
+
+function persistUserMarkers(next: UserMarkerRecord[]) {
+  userMarkers.value = next
+  saveUserMarkers(next)
+}
 
 let map: L.Map | null = null
 let cancelled = false
@@ -24,11 +73,6 @@ let resizeObserver: ResizeObserver | null = null
 let resizeFitRaf = 0
 let compassVueApp: App<Element> | null = null
 
-/**
- * Fill the map pane with tiles (no letterboxing); edges of the image may be clipped.
- * Sets map min zoom to `chosen` so the user cannot zoom out past this level.
- * `zoomMin`/`zoomMax` must be the manifest zoom range so resize refits stay correct.
- */
 function fitMapCoverViewport(
   mapInstance: L.Map,
   imageBounds: L.LatLngBounds,
@@ -124,28 +168,6 @@ onMounted(() => {
         maxNativeZoom,
       }).addTo(map)
 
-      const lg = await fetch(landmarksUrl)
-      if (lg.ok) {
-        const geo = (await lg.json()) as GeoJSON.GeoJSON
-        L.geoJSON(geo, {
-          pointToLayer(feature, latlng) {
-            const layerName = (feature.properties as { layer?: string })?.layer
-            const isRegion = layerName === 'regions'
-            return L.circleMarker(latlng, {
-              radius: isRegion ? 5 : 4,
-              color: isRegion ? '#7eb8da' : '#a68b5b',
-              weight: 1,
-              fillColor: isRegion ? '#3d5c73' : '#f0e6d2',
-              fillOpacity: 0.9,
-            })
-          },
-          onEachFeature(feature, layer) {
-            const name = (feature.properties as { name?: string })?.name
-            if (name) layer.bindPopup(name)
-          },
-        }).addTo(map)
-      }
-
       const applyCoverFit = () => {
         if (!map || cancelled) return
         const zCover = fitMapCoverViewport(
@@ -221,7 +243,66 @@ onUnmounted(() => {
       class="crimson-map__pane"
       aria-hidden="true"
     />
-    <MapRegionsEditor v-if="leafletMap" :map="leafletMap" />
+    <template v-if="leafletMap">
+      <MapPlacesOverlay
+        ref="placesOverlayRef"
+        :map="leafletMap"
+        :show-places="markerUi.showPlaces"
+        :show-regions="markerUi.showRegions"
+        :search-query="markerUi.searchQuery"
+        :thgl-filters="thglFilters"
+        @loaded="placesDataTick += 1"
+      />
+      <MapWorldNodesOverlay
+        ref="worldNodesRef"
+        :map="leafletMap"
+        :show-world-nodes="markerUi.showWorldNodes"
+        :search-query="markerUi.searchQuery"
+        :thgl-filters="thglFilters"
+        @loaded="worldDataTick += 1"
+      />
+      <MapRegionsEditor :map="leafletMap" />
+      <MapUserMarkers
+        ref="userMarkersRef"
+        :map="leafletMap"
+        :markers="userMarkers"
+        :show-user="markerUi.showUser"
+        :search-query="markerUi.searchQuery"
+        :place-mode="markerUi.placeMode"
+        :place-marker-kind="markerUi.placeMarkerKind"
+        :selected-user-id="markerUi.selectedUserId"
+        :thgl-filters="thglFilters"
+        @update:markers="persistUserMarkers"
+        @update:place-mode="markerUi.placeMode = $event"
+        @update:selected-user-id="markerUi.selectedUserId = $event"
+      />
+      <MapMarkersPanel
+        :places-overlay-ref="placesOverlayRef"
+        :user-markers-ref="userMarkersRef"
+        :world-nodes-ref="worldNodesRef"
+        :places-data-tick="placesDataTick"
+        :world-data-tick="worldDataTick"
+        :search-query="markerUi.searchQuery"
+        :show-places="markerUi.showPlaces"
+        :show-regions="markerUi.showRegions"
+        :show-world-nodes="markerUi.showWorldNodes"
+        :show-user="markerUi.showUser"
+        :place-mode="markerUi.placeMode"
+        :place-marker-kind="markerUi.placeMarkerKind"
+        :thgl-filters="thglFilters"
+        :user-markers="userMarkers"
+        :selected-user-id="markerUi.selectedUserId"
+        @update:search-query="markerUi.searchQuery = $event"
+        @update:show-places="markerUi.showPlaces = $event"
+        @update:show-regions="markerUi.showRegions = $event"
+        @update:show-world-nodes="markerUi.showWorldNodes = $event"
+        @update:show-user="markerUi.showUser = $event"
+        @update:place-mode="markerUi.placeMode = $event"
+        @update:place-marker-kind="markerUi.placeMarkerKind = $event"
+        @update:user-markers="persistUserMarkers"
+        @update:selected-user-id="markerUi.selectedUserId = $event"
+      />
+    </template>
   </div>
 </template>
 

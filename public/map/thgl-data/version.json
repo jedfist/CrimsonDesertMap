@@ -1,6 +1,6 @@
 {
-  "id": "42da956e173718716430cc8a87a99b7f",
-  "createdAt": 1774607962059,
+  "id": "4ae05634fb9aa8c7015c4eebd2582b37",
+  "createdAt": 1774895048842,
   "data": {
     "filters": [
       {
@@ -33,6 +33,17 @@
             "icon": {
               "url": "icons.webp",
               "x": 256,
+              "y": 0,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "abyss_bridge",
+            "icon": {
+              "url": "icons.webp",
+              "x": 128,
               "y": 0,
               "width": 64,
               "height": 64
@@ -89,6 +100,61 @@
               "height": 64
             },
             "size": 1.3
+          },
+          {
+            "id": "chest",
+            "icon": {
+              "url": "icons.webp",
+              "x": 256,
+              "y": 448,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "treasure_chest_level",
+            "icon": {
+              "url": "icons.webp",
+              "x": 320,
+              "y": 448,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "collection_chest",
+            "icon": {
+              "url": "icons.webp",
+              "x": 384,
+              "y": 448,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "weapon_display",
+            "icon": {
+              "url": "icons.webp",
+              "x": 448,
+              "y": 448,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "puzzle_chest",
+            "icon": {
+              "url": "icons.webp",
+              "x": 512,
+              "y": 448,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
           }
         ],
         "defaultOpen": false,
@@ -101,8 +167,8 @@
             "id": "faction_quest",
             "icon": {
               "url": "icons.webp",
-              "x": 0,
-              "y": 192,
+              "x": 320,
+              "y": 128,
               "width": 64,
               "height": 64
             },
@@ -112,8 +178,8 @@
             "id": "main_quest",
             "icon": {
               "url": "icons.webp",
-              "x": 64,
-              "y": 192,
+              "x": 384,
+              "y": 128,
               "width": 64,
               "height": 64
             },
@@ -141,8 +207,8 @@
             "id": "tunnel",
             "icon": {
               "url": "icons.webp",
-              "x": 192,
-              "y": 448,
+              "x": 512,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -152,8 +218,8 @@
             "id": "teleport_gate",
             "icon": {
               "url": "icons.webp",
-              "x": 128,
-              "y": 448,
+              "x": 448,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -163,8 +229,8 @@
             "id": "dungeon",
             "icon": {
               "url": "icons.webp",
-              "x": 256,
-              "y": 448,
+              "x": 576,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -174,8 +240,8 @@
             "id": "greymane_shrine",
             "icon": {
               "url": "icons.webp",
-              "x": 320,
-              "y": 448,
+              "x": 640,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -185,8 +251,8 @@
             "id": "religion_box",
             "icon": {
               "url": "icons.webp",
-              "x": 384,
-              "y": 448,
+              "x": 64,
+              "y": 384,
               "width": 64,
               "height": 64
             },
@@ -194,6 +260,17 @@
           },
           {
             "id": "cave",
+            "icon": {
+              "url": "icons.webp",
+              "x": 576,
+              "y": 0,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "watchtower",
             "icon": {
               "url": "icons.webp",
               "x": 0,
@@ -204,18 +281,18 @@
             "size": 1.3
           },
           {
-            "id": "watchtower",
+            "id": "ruins",
             "icon": {
               "url": "icons.webp",
-              "x": 128,
-              "y": 64,
+              "x": 640,
+              "y": 0,
               "width": 64,
               "height": 64
             },
             "size": 1.3
           },
           {
-            "id": "ruins",
+            "id": "shipwreck",
             "icon": {
               "url": "icons.webp",
               "x": 64,
@@ -226,21 +303,10 @@
             "size": 1.3
           },
           {
-            "id": "shipwreck",
-            "icon": {
-              "url": "icons.webp",
-              "x": 192,
-              "y": 64,
-              "width": 64,
-              "height": 64
-            },
-            "size": 1.3
-          },
-          {
             "id": "rest_area",
             "icon": {
               "url": "icons.webp",
-              "x": 256,
+              "x": 128,
               "y": 64,
               "width": 64,
               "height": 64
@@ -251,12 +317,23 @@
             "id": "abandoned_cabin",
             "icon": {
               "url": "icons.webp",
-              "x": 320,
+              "x": 192,
               "y": 64,
               "width": 64,
               "height": 64
             },
             "size": 1.3
+          },
+          {
+            "id": "skill_learning",
+            "icon": {
+              "url": "icons.webp",
+              "x": 576,
+              "y": 448,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.5
           }
         ],
         "defaultOpen": false,
@@ -269,8 +346,8 @@
             "id": "camp",
             "icon": {
               "url": "icons.webp",
-              "x": 0,
-              "y": 128,
+              "x": 448,
+              "y": 64,
               "width": 64,
               "height": 64
             },
@@ -280,7 +357,7 @@
             "id": "castle",
             "icon": {
               "url": "icons.webp",
-              "x": 384,
+              "x": 256,
               "y": 64,
               "width": 64,
               "height": 64
@@ -291,7 +368,7 @@
             "id": "gate",
             "icon": {
               "url": "icons.webp",
-              "x": 256,
+              "x": 0,
               "y": 128,
               "width": 64,
               "height": 64
@@ -302,7 +379,7 @@
             "id": "faction_node",
             "icon": {
               "url": "icons.webp",
-              "x": 512,
+              "x": 256,
               "y": 128,
               "width": 64,
               "height": 64
@@ -313,8 +390,8 @@
             "id": "beacon",
             "icon": {
               "url": "icons.webp",
-              "x": 192,
-              "y": 128,
+              "x": 640,
+              "y": 64,
               "width": 64,
               "height": 64
             },
@@ -324,7 +401,7 @@
             "id": "village",
             "icon": {
               "url": "icons.webp",
-              "x": 448,
+              "x": 320,
               "y": 64,
               "width": 64,
               "height": 64
@@ -335,8 +412,8 @@
             "id": "farm",
             "icon": {
               "url": "icons.webp",
-              "x": 64,
-              "y": 128,
+              "x": 512,
+              "y": 64,
               "width": 64,
               "height": 64
             },
@@ -344,17 +421,6 @@
           },
           {
             "id": "port",
-            "icon": {
-              "url": "icons.webp",
-              "x": 384,
-              "y": 128,
-              "width": 64,
-              "height": 64
-            },
-            "size": 1.3
-          },
-          {
-            "id": "temple",
             "icon": {
               "url": "icons.webp",
               "x": 128,
@@ -365,10 +431,21 @@
             "size": 1.3
           },
           {
+            "id": "temple",
+            "icon": {
+              "url": "icons.webp",
+              "x": 576,
+              "y": 64,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
             "id": "town",
             "icon": {
               "url": "icons.webp",
-              "x": 512,
+              "x": 384,
               "y": 64,
               "width": 64,
               "height": 64
@@ -379,7 +456,7 @@
             "id": "bridge",
             "icon": {
               "url": "icons.webp",
-              "x": 448,
+              "x": 192,
               "y": 128,
               "width": 64,
               "height": 64
@@ -397,8 +474,8 @@
             "id": "shop",
             "icon": {
               "url": "icons.webp",
-              "x": 128,
-              "y": 192,
+              "x": 448,
+              "y": 128,
               "width": 64,
               "height": 64
             },
@@ -408,8 +485,8 @@
             "id": "warehouse",
             "icon": {
               "url": "icons.webp",
-              "x": 0,
-              "y": 576,
+              "x": 128,
+              "y": 448,
               "width": 64,
               "height": 64
             },
@@ -417,6 +494,50 @@
           },
           {
             "id": "smithy",
+            "icon": {
+              "url": "icons.webp",
+              "x": 512,
+              "y": 128,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "furniture_shop",
+            "icon": {
+              "url": "icons.webp",
+              "x": 448,
+              "y": 384,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "dye_shop",
+            "icon": {
+              "url": "icons.webp",
+              "x": 256,
+              "y": 384,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "general_shop",
+            "icon": {
+              "url": "icons.webp",
+              "x": 128,
+              "y": 384,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "grocer",
             "icon": {
               "url": "icons.webp",
               "x": 192,
@@ -427,55 +548,11 @@
             "size": 1.3
           },
           {
-            "id": "furniture_shop",
-            "icon": {
-              "url": "icons.webp",
-              "x": 192,
-              "y": 512,
-              "width": 64,
-              "height": 64
-            },
-            "size": 1.3
-          },
-          {
-            "id": "dye_shop",
-            "icon": {
-              "url": "icons.webp",
-              "x": 0,
-              "y": 512,
-              "width": 64,
-              "height": 64
-            },
-            "size": 1.3
-          },
-          {
-            "id": "general_shop",
-            "icon": {
-              "url": "icons.webp",
-              "x": 448,
-              "y": 448,
-              "width": 64,
-              "height": 64
-            },
-            "size": 1.3
-          },
-          {
-            "id": "grocer",
-            "icon": {
-              "url": "icons.webp",
-              "x": 0,
-              "y": 256,
-              "width": 64,
-              "height": 64
-            },
-            "size": 1.3
-          },
-          {
             "id": "street_vendor",
             "icon": {
               "url": "icons.webp",
-              "x": 128,
-              "y": 512,
+              "x": 384,
+              "y": 384,
               "width": 64,
               "height": 64
             },
@@ -485,8 +562,8 @@
             "id": "black_market",
             "icon": {
               "url": "icons.webp",
-              "x": 320,
-              "y": 512,
+              "x": 576,
+              "y": 384,
               "width": 64,
               "height": 64
             },
@@ -496,7 +573,7 @@
             "id": "church",
             "icon": {
               "url": "icons.webp",
-              "x": 448,
+              "x": 64,
               "y": 192,
               "width": 64,
               "height": 64
@@ -507,8 +584,8 @@
             "id": "smuggler",
             "icon": {
               "url": "icons.webp",
-              "x": 64,
-              "y": 512,
+              "x": 320,
+              "y": 384,
               "width": 64,
               "height": 64
             },
@@ -518,7 +595,7 @@
             "id": "bank",
             "icon": {
               "url": "icons.webp",
-              "x": 384,
+              "x": 0,
               "y": 192,
               "width": 64,
               "height": 64
@@ -529,8 +606,8 @@
             "id": "inn",
             "icon": {
               "url": "icons.webp",
-              "x": 256,
-              "y": 192,
+              "x": 576,
+              "y": 128,
               "width": 64,
               "height": 64
             },
@@ -540,8 +617,8 @@
             "id": "tannery",
             "icon": {
               "url": "icons.webp",
-              "x": 64,
-              "y": 256,
+              "x": 256,
+              "y": 192,
               "width": 64,
               "height": 64
             },
@@ -551,8 +628,8 @@
             "id": "saddlery",
             "icon": {
               "url": "icons.webp",
-              "x": 128,
-              "y": 256,
+              "x": 320,
+              "y": 192,
               "width": 64,
               "height": 64
             },
@@ -562,7 +639,7 @@
             "id": "fishing_shop",
             "icon": {
               "url": "icons.webp",
-              "x": 512,
+              "x": 128,
               "y": 192,
               "width": 64,
               "height": 64
@@ -573,8 +650,8 @@
             "id": "butcher",
             "icon": {
               "url": "icons.webp",
-              "x": 512,
-              "y": 448,
+              "x": 192,
+              "y": 384,
               "width": 64,
               "height": 64
             },
@@ -584,8 +661,8 @@
             "id": "research_institute",
             "icon": {
               "url": "icons.webp",
-              "x": 384,
-              "y": 512,
+              "x": 640,
+              "y": 384,
               "width": 64,
               "height": 64
             },
@@ -595,8 +672,8 @@
             "id": "contribution_shop",
             "icon": {
               "url": "icons.webp",
-              "x": 256,
-              "y": 512,
+              "x": 512,
+              "y": 384,
               "width": 64,
               "height": 64
             },
@@ -606,8 +683,8 @@
             "id": "witch_shop",
             "icon": {
               "url": "icons.webp",
-              "x": 448,
-              "y": 512,
+              "x": 0,
+              "y": 448,
               "width": 64,
               "height": 64
             },
@@ -617,8 +694,8 @@
             "id": "stoneshop",
             "icon": {
               "url": "icons.webp",
-              "x": 64,
-              "y": 576,
+              "x": 192,
+              "y": 448,
               "width": 64,
               "height": 64
             },
@@ -628,8 +705,8 @@
             "id": "pet_shop",
             "icon": {
               "url": "icons.webp",
-              "x": 512,
-              "y": 512,
+              "x": 64,
+              "y": 448,
               "width": 64,
               "height": 64
             },
@@ -646,8 +723,19 @@
             "id": "bonfire",
             "icon": {
               "url": "icons.webp",
-              "x": 192,
-              "y": 256,
+              "x": 384,
+              "y": 192,
+              "width": 64,
+              "height": 64
+            },
+            "size": 1.3
+          },
+          {
+            "id": "crafting_anvil",
+            "icon": {
+              "url": "icons.webp",
+              "x": 0,
+              "y": 384,
               "width": 64,
               "height": 64
             },
@@ -657,8 +745,8 @@
             "id": "alchemy_station",
             "icon": {
               "url": "icons.webp",
-              "x": 320,
-              "y": 256,
+              "x": 512,
+              "y": 192,
               "width": 64,
               "height": 64
             },
@@ -668,8 +756,8 @@
             "id": "cooking_station",
             "icon": {
               "url": "icons.webp",
-              "x": 256,
-              "y": 256,
+              "x": 448,
+              "y": 192,
               "width": 64,
               "height": 64
             },
@@ -686,8 +774,8 @@
             "id": "mercury",
             "icon": {
               "url": "icons.webp",
-              "x": 192,
-              "y": 320,
+              "x": 128,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -695,21 +783,15 @@
           },
           {
             "id": "rubber",
-            "icon": {
-              "url": "icons.webp",
-              "x": 64,
-              "y": 320,
-              "width": 64,
-              "height": 64
-            },
+            "icon": "rubber.webp",
             "size": 1.3
           },
           {
             "id": "jijeongta_leaf",
             "icon": {
               "url": "icons.webp",
-              "x": 384,
-              "y": 320,
+              "x": 256,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -719,8 +801,8 @@
             "id": "kudzu_vine",
             "icon": {
               "url": "icons.webp",
-              "x": 448,
-              "y": 320,
+              "x": 320,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -728,21 +810,15 @@
           },
           {
             "id": "opuntia",
-            "icon": {
-              "url": "icons.webp",
-              "x": 0,
-              "y": 320,
-              "width": 64,
-              "height": 64
-            },
+            "icon": "opuntia.webp",
             "size": 1.3
           },
           {
             "id": "chaya",
             "icon": {
               "url": "icons.webp",
-              "x": 256,
-              "y": 320,
+              "x": 192,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -750,21 +826,15 @@
           },
           {
             "id": "ensete",
-            "icon": {
-              "url": "icons.webp",
-              "x": 320,
-              "y": 320,
-              "width": 64,
-              "height": 64
-            },
+            "icon": "ensete.webp",
             "size": 1.3
           },
           {
             "id": "chlorella",
             "icon": {
               "url": "icons.webp",
-              "x": 448,
-              "y": 256,
+              "x": 640,
+              "y": 192,
               "width": 64,
               "height": 64
             },
@@ -774,7 +844,7 @@
             "id": "dulse",
             "icon": {
               "url": "icons.webp",
-              "x": 512,
+              "x": 0,
               "y": 256,
               "width": 64,
               "height": 64
@@ -785,8 +855,8 @@
             "id": "amaranth",
             "icon": {
               "url": "icons.webp",
-              "x": 384,
-              "y": 256,
+              "x": 576,
+              "y": 192,
               "width": 64,
               "height": 64
             },
@@ -796,8 +866,8 @@
             "id": "taro",
             "icon": {
               "url": "icons.webp",
-              "x": 128,
-              "y": 320,
+              "x": 64,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -814,8 +884,8 @@
             "id": "mine_blacksmith",
             "icon": {
               "url": "icons.webp",
-              "x": 0,
-              "y": 448,
+              "x": 320,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -825,8 +895,8 @@
             "id": "mine_bluestone",
             "icon": {
               "url": "icons.webp",
-              "x": 192,
-              "y": 384,
+              "x": 640,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -836,8 +906,8 @@
             "id": "mine_copper",
             "icon": {
               "url": "icons.webp",
-              "x": 0,
-              "y": 384,
+              "x": 448,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -847,8 +917,8 @@
             "id": "mine_diamond",
             "icon": {
               "url": "icons.webp",
-              "x": 64,
-              "y": 384,
+              "x": 512,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -858,8 +928,8 @@
             "id": "mine_greenstone",
             "icon": {
               "url": "icons.webp",
-              "x": 256,
-              "y": 384,
+              "x": 0,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -869,8 +939,8 @@
             "id": "mine_iron",
             "icon": {
               "url": "icons.webp",
-              "x": 512,
-              "y": 320,
+              "x": 384,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -880,8 +950,8 @@
             "id": "mine_redstone",
             "icon": {
               "url": "icons.webp",
-              "x": 448,
-              "y": 384,
+              "x": 192,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -891,8 +961,8 @@
             "id": "mine_ruby",
             "icon": {
               "url": "icons.webp",
-              "x": 128,
-              "y": 384,
+              "x": 576,
+              "y": 256,
               "width": 64,
               "height": 64
             },
@@ -902,8 +972,8 @@
             "id": "mine_whitestone",
             "icon": {
               "url": "icons.webp",
-              "x": 320,
-              "y": 384,
+              "x": 64,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -913,8 +983,8 @@
             "id": "mine_bismuth",
             "icon": {
               "url": "icons.webp",
-              "x": 384,
-              "y": 384,
+              "x": 128,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -924,8 +994,8 @@
             "id": "mine_sulfur",
             "icon": {
               "url": "icons.webp",
-              "x": 512,
-              "y": 384,
+              "x": 256,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -935,8 +1005,8 @@
             "id": "mine_vein",
             "icon": {
               "url": "icons.webp",
-              "x": 64,
-              "y": 448,
+              "x": 384,
+              "y": 320,
               "width": 64,
               "height": 64
             },
@@ -1147,9 +1217,9 @@
   },
   "more": {
     "nodes": {
-      "OpenWorld": "/nodes/OpenWorld.fe89a4f8f7da165094a1d34a34fc6cc4.raw"
+      "OpenWorld": "/nodes/OpenWorld.f3220e13fa4648a9749a3d0243084f57.raw"
     },
-    "icons": "/icons/icons.381e62d0a9eab3930bba6138ef38ba5c.webp",
+    "icons": "/icons/icons.6447149c65d9126c105256dd3e6ed1e7.webp",
     "locales": [
       "en",
       "de",

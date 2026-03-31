@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import sharp from 'sharp'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const OUT = path.join(ROOT, 'public', 'map', 'thgl-data')
@@ -42,6 +43,34 @@ async function main() {
   await fs.writeFile(path.join(OUT, 'tiles.json'), tilesText, 'utf8')
 
   const version = JSON.parse(versionText)
+
+  const iconsRel = version?.more?.icons
+  if (iconsRel && typeof iconsRel === 'string') {
+    const iconUrl = `${CDN}${iconsRel}`
+    const iconBuf = await fetchBytes(iconUrl)
+    const iconDir = path.join(OUT, 'icons')
+    await fs.mkdir(iconDir, { recursive: true })
+    const iconName = path.basename(iconsRel)
+    const iconPath = path.join(iconDir, iconName)
+    await fs.writeFile(iconPath, iconBuf)
+    const meta = await sharp(iconPath).metadata()
+    const filtersPayload = {
+      source: `${CDN}/version.json (data.filters)`,
+      iconSheet: {
+        file: `map/thgl-data/icons/${iconName}`,
+        width: meta.width ?? 1024,
+        height: meta.height ?? 1024,
+      },
+      groups: version?.data?.filters ?? [],
+    }
+    await fs.writeFile(
+      path.join(OUT, 'map-filters.json'),
+      JSON.stringify(filtersPayload),
+      'utf8',
+    )
+    console.log('Wrote map-filters.json +', iconName, meta.width, 'x', meta.height)
+  }
+
   const nodesPath = version?.more?.nodes?.OpenWorld
   if (nodesPath) {
     const rawUrl = `${CDN}${nodesPath}`
@@ -77,7 +106,8 @@ async function main() {
   }
   await fs.writeFile(path.join(OUT, 'coords-meta.json'), JSON.stringify(meta, null, 2), 'utf8')
 
-  const features = []
+  const placeFeatures = []
+  const regionFeatures = []
   const drawings = version?.data?.drawings ?? []
   for (const block of drawings) {
     const name = block?.name ?? 'drawing'
@@ -87,7 +117,7 @@ async function main() {
       if (!Array.isArray(pos) || pos.length < 2) continue
       const [gx, gy] = pos
       const [lng, lat] = thXYToGeoJsonLngLat(gx, gy, bounds, pyW, pyH)
-      features.push({
+      placeFeatures.push({
         type: 'Feature',
         properties: {
           name: t.text ?? '',
@@ -105,7 +135,7 @@ async function main() {
     const c = r?.center
     if (!Array.isArray(c) || c.length < 2) continue
     const [lng, lat] = thXYToGeoJsonLngLat(c[0], c[1], bounds, pyW, pyH)
-    features.push({
+    regionFeatures.push({
       type: 'Feature',
       properties: {
         name: r.id ?? 'region',
@@ -117,10 +147,21 @@ async function main() {
     })
   }
 
+  const features = [...placeFeatures, ...regionFeatures]
   const fc = { type: 'FeatureCollection', features }
   await fs.writeFile(
     path.join(OUT, 'landmarks.geojson'),
     JSON.stringify(fc),
+    'utf8',
+  )
+  await fs.writeFile(
+    path.join(OUT, 'places.geojson'),
+    JSON.stringify({ type: 'FeatureCollection', features: placeFeatures }),
+    'utf8',
+  )
+  await fs.writeFile(
+    path.join(OUT, 'region-centers.geojson'),
+    JSON.stringify({ type: 'FeatureCollection', features: regionFeatures }),
     'utf8',
   )
 
@@ -131,14 +172,21 @@ async function main() {
       '- version.json — full site map config (filters, tiles, drawings, regions).',
       '- tiles.json — tile layer config.',
       '- nodes/*.raw — binary spawn/marker blob (format proprietary; for archival).',
-      '- landmarks.geojson — Points from drawings + region centers, projected onto local Pywel pixel space.',
+      '- landmarks.geojson — All points (drawings + region centers).',
+      '- places.geojson — Drawing labels only.',
+      '- region-centers.geojson — Region center points only.',
       '- coords-meta.json — bounds used for projection.',
+      '- map-filters.json — TH.GL filter groups + icon sprite sheet (same taxonomy as crimsondesert.th.gl).',
+      '- icons/*.webp — mirrored sprite from CDN.',
+      '- world-nodes.geojson — run npm run extract-thgl-world-nodes after ingest (parses nodes/*.raw).',
       '',
     ].join('\n'),
     'utf8',
   )
 
-  console.log(`Wrote ${features.length} features -> ${OUT}`)
+  console.log(
+    `Wrote ${features.length} features (${placeFeatures.length} places, ${regionFeatures.length} region centers) -> ${OUT}`,
+  )
 }
 
 main().catch((e) => {
