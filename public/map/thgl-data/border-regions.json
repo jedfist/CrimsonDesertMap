@@ -859,6 +859,10 @@
           3012.9979629090717
         ],
         [
+          3016.5172413793102,
+          3016.7210280147897
+        ],
+        [
           2989,
           3026.4940739172994
         ],
@@ -2004,8 +2008,8 @@
         ]
       ],
       "label": {
-        "lng": 4664,
-        "lat": 4600.0059260827,
+        "lng": 4732,
+        "lat": 4620.003250094795,
         "fontSizePx": 28,
         "fontFamilyId": "medieval-sharp"
       },
@@ -2527,8 +2531,7 @@
       "fillOpacity": 0.23,
       "lineHighlightColor": "#d624d0",
       "lineHighlightWeight": 7,
-      "polylineFill": true,
-      "lineHighlight": false
+      "polylineFill": true
     }
   ]
 }
