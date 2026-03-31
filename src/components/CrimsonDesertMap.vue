@@ -246,6 +246,7 @@ onUnmounted(() => {
         :search-query="markerUi.searchQuery"
         :thgl-filters="thglFilters"
         @loaded="treasuresDataTick += 1"
+        @treasure-positions-changed="treasuresDataTick += 1"
       />
       <MapUserMarkers
         ref="userMarkersRef"

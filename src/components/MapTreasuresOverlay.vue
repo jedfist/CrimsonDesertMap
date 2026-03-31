@@ -9,6 +9,11 @@ import {
 } from '../config/map'
 import { escapeHtml, matchesMarkerSearch } from '../lib/mapMarkersShared'
 import {
+  getTreasureBoxDragPosition,
+  setTreasureBoxDragPosition,
+  treasureBoxDragKey,
+} from '../lib/treasureBoxDragPositions'
+import {
   linearGameToPywelPixels,
   thglGameToPywelPixels,
   type ThglBounds,
@@ -33,6 +38,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   loaded: []
+  treasurePositionsChanged: []
 }>()
 
 const map = props.map as L.Map
@@ -88,6 +94,17 @@ function treasureRowKey(nodeId: string, lat: number, lng: number): string {
   return `${nodeId}|${lat}|${lng}`
 }
 
+/** Stable map key so dragged treasure_box markers still match the sidebar + fly-to. */
+function markerMapKey(
+  f: GeoJSON.Feature<GeoJSON.Point, TreasureProps>,
+  name: string,
+  ll: L.LatLng,
+): string {
+  const dk = treasureBoxDragKey(f)
+  if (dk) return `${name}|${dk}`
+  return treasureRowKey(name, ll.lat, ll.lng)
+}
+
 const pywelW = ref(8192)
 const pywelH = ref(8192)
 let thglBounds: ThglBounds | null = null
@@ -134,6 +151,18 @@ function latLngForFeature(
   }
   const [px, py] = f.geometry.coordinates as [number, number]
   return L.latLng(py, px)
+}
+
+/** Map position after optional user drag override (treasure_box only). */
+function markerLatLngForFeature(
+  f: GeoJSON.Feature<GeoJSON.Point, TreasureProps>,
+): L.LatLng {
+  const dragKey = treasureBoxDragKey(f)
+  if (dragKey) {
+    const o = getTreasureBoxDragPosition(dragKey)
+    if (o) return L.latLng(o.lat, o.lng)
+  }
+  return latLngForFeature(f)
 }
 
 function treasureIcon(
@@ -201,7 +230,7 @@ function popupHtml(f: GeoJSON.Feature<GeoJSON.Point, TreasureProps>): string {
   if (isTreasureBox(rawKey || undefined, id || undefined)) {
     const src = escapeHtml(publicAssetUrl(TREASURE_BOX_MARKER_PNG_PATH))
     const [pw, ph] = TREASURE_BOX_PNG_SIZE
-    iconWrap = `<div class="map-treasures__popup-icon-wrap" aria-hidden="true"><img class="map-treasures__popup-png" src="${src}" width="${pw * 2}" height="${ph * 2}" alt="" /></div>`
+    iconWrap = `<div class="map-treasures__popup-icon-wrap" aria-hidden="true"><img class="map-treasures__popup-png" src="${src}" width="${pw * 2}" height="${ph * 2}" alt="" /></div><p class="map-treasures__popup-drag-hint">Drag the marker on the map to fine-tune position (saved in this browser).</p>`
   } else {
     iconWrap = `<div class="map-treasures__popup-icon-wrap" aria-hidden="true">${popupTreasureSpriteHtml(spriteKey)}</div>`
   }
@@ -216,22 +245,35 @@ function syncLayers() {
   for (const f of features) {
     if (f.geometry?.type !== 'Point') continue
     if (!props.showTreasures) continue
-    const ll = latLngForFeature(f)
+    const ll = markerLatLngForFeature(f)
     const thglKey = f.properties?.thglKey ?? DEFAULT_USER_THGL_FILTER_KEY
     const name = f.properties?.nodeId ?? 'treasure'
+    const boxDragKey = treasureBoxDragKey(f)
+    const draggable = boxDragKey != null
     const m = L.marker(ll, {
       icon: treasureIcon(thglKey, name, name),
       pane: TREASURE_MARKER_PANE,
       interactive: true,
       zIndexOffset: 800,
       bubblingMouseEvents: false,
+      draggable,
     })
     m.bindPopup(popupHtml(f), {
       className: 'map-treasures__popup-outer',
       maxWidth: 260,
     })
+    if (draggable && boxDragKey) {
+      m.on('dragstart', () => {
+        m.closePopup()
+      })
+      m.on('dragend', () => {
+        const p = m.getLatLng()
+        setTreasureBoxDragPosition(boxDragKey, p.lat, p.lng)
+        emit('treasurePositionsChanged')
+      })
+    }
     m.addTo(layerGroup)
-    markerByRowKey.set(treasureRowKey(name, ll.lat, ll.lng), m)
+    markerByRowKey.set(markerMapKey(f, name, ll), m)
   }
 }
 
@@ -301,10 +343,18 @@ defineExpose({
   getTreasureCount(): number {
     return features.length
   },
-  flyToTreasure(lat: number, lng: number, nodeId?: string) {
+  flyToTreasure(
+    lat: number,
+    lng: number,
+    nodeId?: string,
+    treasureStableKey?: string,
+  ) {
     const ll = L.latLng(lat, lng)
     const id = nodeId ?? 'treasure'
-    const key = treasureRowKey(id, lat, lng)
+    const key =
+      treasureStableKey != null && treasureStableKey !== ''
+        ? `${id}|${treasureStableKey}`
+        : treasureRowKey(id, lat, lng)
     let marker = markerByRowKey.get(key)
     if (!marker) {
       let best: L.Marker | undefined
@@ -337,6 +387,8 @@ defineExpose({
     lat: number
     lng: number
     thglKey: string
+    /** Present for `treasure_box`: stable id for fly-to after drag. */
+    treasureStableKey?: string
   }[] {
     if (!props.showTreasures) return []
     const rows: {
@@ -344,16 +396,19 @@ defineExpose({
       lat: number
       lng: number
       thglKey: string
+      treasureStableKey?: string
     }[] = []
     for (const f of features) {
       if (f.geometry?.type !== 'Point') continue
       if (!treasureMatchesPanelSearch(f)) continue
-      const ll = latLngForFeature(f)
+      const ll = markerLatLngForFeature(f)
+      const sk = treasureBoxDragKey(f) ?? undefined
       rows.push({
         nodeId: f.properties?.nodeId ?? '',
         lat: ll.lat,
         lng: ll.lng,
         thglKey: f.properties?.thglKey ?? '',
+        ...(sk ? { treasureStableKey: sk } : {}),
       })
     }
     return rows.slice(0, 300)
@@ -475,9 +530,25 @@ defineExpose({
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
 }
 
+.leaflet-marker-draggable.map-treasures__png-wrap {
+  cursor: grab;
+}
+
+.leaflet-dragging .leaflet-marker-draggable.map-treasures__png-wrap {
+  cursor: grabbing;
+}
+
 .map-treasures__popup-png {
   display: block;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+.map-treasures__popup-drag-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #5c564c;
+  font-style: italic;
 }
 </style>

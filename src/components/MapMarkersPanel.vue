@@ -19,12 +19,18 @@ export type UserMarkersExposed = {
 }
 
 export type TreasuresOverlayExposed = {
-  flyToTreasure: (lat: number, lng: number, nodeId?: string) => void
+  flyToTreasure: (
+    lat: number,
+    lng: number,
+    nodeId?: string,
+    treasureStableKey?: string,
+  ) => void
   getTreasureRows: () => {
     nodeId: string
     lat: number
     lng: number
     thglKey: string
+    treasureStableKey?: string
   }[]
   getTreasureCount: () => number
 }
@@ -145,8 +151,18 @@ function flyToUser(lat: number, lng: number) {
   props.userMarkersRef?.flyToUser(lat, lng)
 }
 
-function flyToTreasure(lat: number, lng: number, nodeId?: string) {
-  props.treasuresOverlayRef?.flyToTreasure(lat, lng, nodeId)
+function flyToTreasure(
+  lat: number,
+  lng: number,
+  nodeId?: string,
+  treasureStableKey?: string,
+) {
+  props.treasuresOverlayRef?.flyToTreasure(
+    lat,
+    lng,
+    nodeId,
+    treasureStableKey,
+  )
 }
 
 function triggerImport() {
@@ -434,12 +450,24 @@ function listMiniVueStyle(kind: string): Record<string, string> {
         <ul class="map-markers-panel__list">
           <li
             v-for="(row, ti) in treasureRows"
-            :key="'t-' + row.nodeId + row.lat + row.lng + ti"
+            :key="
+              't-' +
+              (row.treasureStableKey ?? row.nodeId + '-' + row.lat + '-' + row.lng) +
+              '-' +
+              ti
+            "
           >
             <button
               type="button"
               class="map-markers-panel__link map-markers-panel__link--user"
-              @click="flyToTreasure(row.lat, row.lng, row.nodeId)"
+              @click="
+                flyToTreasure(
+                  row.lat,
+                  row.lng,
+                  row.nodeId,
+                  row.treasureStableKey,
+                )
+              "
             >
               <span
                 class="map-markers-panel__mini-icon"
