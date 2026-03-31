@@ -2523,12 +2523,12 @@
       },
       "geometryKind": "polyline",
       "strokeColor": "#000000",
-      "lineHighlight": false,
+      "fillColor": "#650788",
+      "fillOpacity": 0.23,
       "lineHighlightColor": "#d624d0",
       "lineHighlightWeight": 7,
       "polylineFill": true,
-      "fillColor": "#650788",
-      "fillOpacity": 0.23
+      "lineHighlight": false
     }
   ]
 }
