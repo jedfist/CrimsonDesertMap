@@ -1,0 +1,17 @@
+{
+  "name": "Crimson Desert Interactive Map",
+  "short_name": "CD Interactive",
+  "description": "Interactive map and atlas for Crimson Desert.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121214",
+  "theme_color": "#121214",
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "type": "image/png",
+      "sizes": "624x590",
+      "purpose": "any"
+    }
+  ]
+}
